@@ -1,0 +1,16 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "jinwoo-skills",
+  "description": "공개 Claude Code 스킬 마켓플레이스",
+  "owner": {
+    "name": "jinwooyoo",
+    "email": "tomttlr@gmail.com"
+  },
+  "plugins": [
+    {
+      "name": "kepco-tes",
+      "description": "한국전력공사(KEPCO) 심야전력 축냉설비(TES) 설치계획서 검토 스킬. 설치계획서(PDF/HWP/이미지)를 판독해 지침 적합성을 검증하고 부하계산서·운전계획서·설비사양을 엑셀로 산출한다.",
+      "source": "./plugins/kepco-tes"
+    }
+  ]
+}

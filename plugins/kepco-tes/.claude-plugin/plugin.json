@@ -1,0 +1,9 @@
+{
+  "name": "kepco-tes",
+  "description": "한국전력공사(KEPCO) 심야전력 축냉설비(TES) 설치계획서를 기준 적합성 관점에서 검토하고 결과를 엑셀로 정리하는 스킬.",
+  "version": "1.0.0",
+  "author": {
+    "name": "jinwooyoo",
+    "email": "tomttlr@gmail.com"
+  }
+}
