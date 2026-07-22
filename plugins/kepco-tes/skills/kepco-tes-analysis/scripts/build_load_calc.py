@@ -128,7 +128,7 @@ def build_main(ws, spec, notes=True):
          load.get("계산서_냉방부하합계"), '=IF(ABS(B{r}-D{r})<=1,"✅","⚠️")',
          "D열=계산서 기재 합계 (전사 누락 검증)"),
         ("냉방 최대부하율", "=B{0}/B{1}".format(R_LOAD, R_AREA), "%s/㎡" % unit, NA, NA,
-         "= 냉방 최대부하 ÷ 냉방면적"),
+         "냉방 최대부하 ÷ 냉방면적"),   # '='로 시작하는 표시용 문자열 금지 (엑셀이 수식으로 저장 후 제거)
         ("냉방 최대부하(RT)", rt.format(R_LOAD, div), "RT",
          load.get("설치계획서_냉방최대부하_RT"), '=IF(ABS(B{r}-D{r})<=D{r}*0.05,"✅","❌")',
          "1 RT = %s %s" % ("{:,}".format(div) if div else "-", unit)),
@@ -136,7 +136,7 @@ def build_main(ws, spec, notes=True):
          load.get("계산서_난방부하합계"), '=IF(ABS(B{r}-D{r})<=1,"✅","⚠️")',
          "D열=계산서 기재 합계"),
         ("난방 최대부하율", "=B{0}/B{1}".format(R_LOAD + 3, R_AREA + 1), "%s/㎡" % unit, NA, NA,
-         "= 난방 최대부하 ÷ 난방면적"),
+         "난방 최대부하 ÷ 난방면적"),   # '='로 시작하는 표시용 문자열 금지
         ("난방 최대부하(RT)", rt.format(R_LOAD + 3, div), "RT",
          load.get("설치계획서_난방최대부하_RT"),
          '=IF(ABS(B{r}-D{r})<=MAX(1,D{r}*0.05),"✅","❌")', "설치계획서 기재값과 대조"),
