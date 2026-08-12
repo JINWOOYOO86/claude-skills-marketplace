@@ -1,0 +1,10 @@
+@echo off
+REM 주간 공고 모니터링 — Windows 작업 스케줄러가 호출하는 진입점 (예: 매주 일요일 23:10)
+REM WSL 안에서 claude -p 를 실행한다 (플러그인·스킬·루틴 폴더가 WSL 쪽에서 보이는 구성)
+REM
+REM ※ 이 파일은 반드시 CRLF 로 저장한다. LF 로 저장하면 실행되지 않는다.
+REM ※ WSL 배포판 이름(-d Ubuntu)이 다르면 바꾼다. `wsl.exe -l -q` 로 확인.
+
+wsl.exe -d Ubuntu -- bash -lc "bash {{ROUTINE_ROOT}}/scripts/run_rfp_scout.sh"
+
+exit /b %ERRORLEVEL%

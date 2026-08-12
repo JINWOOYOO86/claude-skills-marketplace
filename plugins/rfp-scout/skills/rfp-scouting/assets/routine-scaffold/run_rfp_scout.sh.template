@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+# 주간 공고 모니터링 러너 — 템플릿
+#
+# 사용법: {{ROUTINE_ROOT}} 를 루틴 폴더의 절대경로(WSL이면 /mnt/c/... 형식)로,
+#         {{RESULT_URL_FALLBACK}} 를 결과 HTML 의 기본 링크로 치환한 뒤
+#         <루틴폴더>/scripts/run_rfp_scout.sh 로 저장한다. 설치 절차는 같은 폴더의 README.md 참조.
+#
+# 호출: OS 스케줄러(예: 매주 일요일 23:10) → run_rfp_scout.bat → 이 스크립트
+# 로그: ../logs/YYYYMMDD_HHMM.log
+#
+# set -e 를 쓰지 않는다. claude 가 비정상 종료해도 로그·정리까지는 끝내야 하기 때문이다.
+
+set -uo pipefail
+
+ROOT="{{ROUTINE_ROOT}}"
+LOGDIR="$ROOT/logs"
+mkdir -p "$LOGDIR" "$ROOT/result/reports" "$ROOT/result/archive" "$ROOT/raw"
+LOG="$LOGDIR/$(date +%Y%m%d_%H%M).log"
+START_EPOCH=$(date +%s)   # HTML 이 이번 회차에 갱신됐는지 판정하는 기준
+
+cd "$ROOT" || { echo "루틴 폴더 접근 실패: $ROOT" >&2; exit 1; }
+
+# ── 소유 PC 확인 ────────────────────────────────────────────────────
+# 클라우드 동기화 폴더(Dropbox·OneDrive 등)를 두 PC 가 공유하고 양쪽에 스케줄이 걸려 있으면
+# 같은 시각에 함께 돌아 seen_rfp.json·latest.html·캘린더 일정을 서로 덮어쓴다.
+# 동기화 폴더는 잠금이 아니라 flock 으로 막을 수 없다 → 호스트명으로 소유자를 고정한다.
+OWNER=$(grep -vE '^\s*(#|$)' "$ROOT/owner.txt" 2>/dev/null | head -1 | tr -d '\r\n ')
+ME=$(hostname)
+if [ -n "$OWNER" ] && [ "$OWNER" != "$ME" ]; then
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] 건너뜀: 이 PC($ME)는 소유자가 아닙니다(owner.txt=$OWNER)." \
+    | tee -a "$LOGDIR/skipped_$ME.log"
+  exit 0
+fi
+if [ -z "$OWNER" ]; then
+  echo "경고: owner.txt 가 비어 있어 소유 PC 확인을 건너뜁니다($ME 에서 실행)." | tee -a "$LOG"
+fi
+
+PROMPT='주간 공고 모니터링을 실행하라.
+
+작업 폴더는 {{ROUTINE_ROOT}} 이고, 파일 배치는 다음과 같다:
+  profile.md            관심 연구주제·키워드·자격·알림설정 (rfp-scouting 의 프로파일 역할)
+  seen_rfp.json         보고 이력
+  result/latest.html    HTML 결과 리포트 (사람이 먼저 보는 산출물)
+  result/latest_candidates.md   후보 목록·탈락 사유·탐색 로그 (HTML 의 원본 데이터)
+  result/reports/{YYYYMMDD}_{공고약칭}.md   분석리포트
+  result/archive/       지난 회차 HTML
+  raw/                  다운로드한 공고문·첨부 원본
+  result_link.txt       결과 HTML 을 가리킬 링크 (비어 있으면 로컬 경로 사용)
+  calendar_event.json   지난 회차가 만든 캘린더 일정 ID (다음 회차가 지울 대상)
+
+rfp-scouting 스킬의 "7. 주간 모니터링" 절차를 위 경로에 매핑해 그대로 따른다:
+1) profile.md 로드 (없으면 알림만 보내고 종료)
+2) IRIS 접수중 공고 수집. 스킬 동봉 scripts/iris_fetch.py 를 쓴다
+   (목록·상세·첨부 전 구간 HTTP — 로그인·브라우저 불필요).
+   접수중 전체가 20~30건 수준이므로 키워드 검색이 아니라 전수 훑기로 한다.
+3) seen_rfp.json 과 대조해 기보고 건 제외
+4) 하드필터: 마감 경과·주관자격 미달·규모/기간 하한 미달·제외어
+5) 남은 신규 공고의 첨부(HWP/HWPX/PDF/ZIP)를 raw/ 에 받아 텍스트 추출 후
+   (스킬 동봉 scripts/extract_attachment.py)
+   profile.md 의 연구주제 서술과 의미 대조 → 직접관련/간접관련/무관 3등급 판정.
+   판정마다 RFP 원문 문장을 인용하라. 제목만 보고 판정하지 마라.
+   하드필터로 탈락한 건도 첨부를 열어 확인하고 그 결과를 이력 note 에 남겨라.
+6) 직접/간접관련 건에 대해 result/reports/{YYYYMMDD}_{공고약칭}.md 분석리포트 작성,
+   result/latest_candidates.md 갱신, PushNotification 1줄 알림,
+   profile.md 에 적힌 주소로 Gmail 초안 생성
+   (히트가 없으면 알림·메일 없이 result/latest_candidates.md 에만 "해당 없음" 기록)
+6-1) HTML 리포트 갱신 — 기존 result/latest.html 을 result/archive/{직전회차YYYYMMDD}.html 로
+   옮긴 뒤 새 result/latest.html 을 만든다. 자기완결 단일 파일로 만들고(CSS·폰트 내장,
+   외부 요청 0) 라이트/다크 토글을 붙인다. 직전 회차 HTML 을 구조 템플릿으로 재사용하고
+   수치·문구만 갈아끼우면 된다.
+   히트가 0건인 주에도 HTML 은 반드시 만든다. "이번 주 해당 없음"과 탐색 범위·탈락
+   사유가 적힌 리포트가 나와야 모니터링이 돌았다는 증거가 된다.
+
+   **공고를 언급하는 모든 자리에 원문 링크를 건다.** 번호만 적어 두면 확인할 때마다
+   포털에서 다시 검색해야 한다.
+   - 사업공고: https://www.iris.go.kr/contents/retrieveBsnsAncmView.do?ancmId={ancmId}
+   - 공모예고: https://www.iris.go.kr/contents/retrieveAncmPrntcView.do?bsnsPrntcNo={번호}
+   - 히트·탈락·감시대상을 가리지 않고 공고번호가 나오면 링크를 건다. 제목 자체를 <a> 로
+     감싸고 공고번호도 함께 보이게 둔다.
+   - raw/ 에 받아 둔 첨부는 로컬 파일 링크도 함께 단다(한글·공백은 percent-encoding).
+   - <a> 에는 target="_blank" rel="noopener" 를 붙인다.
+   - 링크를 지어내지 마라. 수집 단계에서 확인한 번호만 쓰고, 모르는 건은 링크 없이 두고
+     그 사실을 리포트에 적는다.
+   HTML 을 쓴 뒤 다음 두 줄을 그대로 출력하라(러너가 로그에서 찾아 쓴다):
+     [HTML] result/latest.html — <바이트수>바이트, 히트 <n>건
+     [HTML-ARCHIVE] result/archive/<파일명> (직전 회차 보관)
+6-2) 결과 확인용 캘린더 일정 교체 — **반복 일정을 만들지 마라.**
+   ① calendar_event.json 이 있으면 거기 적힌 event_id 를 지운다(지난 회차 일정 삭제).
+      이미 없는 일정이면 조용히 넘어간다.
+   ② 다음 확인 시각(예: 실행일 다음날 09:10~09:25)에 단발 일정 하나를 만든다.
+      제목은 「주간 공고 모니터링 결과 확인」.
+      본문 맨 위에 결과 HTML 링크를 넣는다. 링크는 result_link.txt 에 적힌 주소를 쓰고,
+      비어 있으면 {{RESULT_URL_FALLBACK}} 를 쓴다.
+      이어서 이번 회차 한 줄 요약(신규 n건 / 히트 n건)을 넣는다.
+   ③ 새 일정의 event_id·start·html_link 를 calendar_event.json 에 저장한다.
+   ④ 다음 줄을 그대로 출력하라:
+     [CALENDAR] 삭제 <이전id 또는 없음> / 생성 <새id> <YYYY-MM-DD HH:MM>
+   캘린더 도구를 못 쓰는 환경이면 대신 result/reminder.ics 를 같은 내용으로 쓰고
+   [CALENDAR] 줄에 "도구 없음 -> ics 생성" 이라고 남긴다. 실패를 조용히 넘기지 마라.
+7) seen_rfp.json 갱신 (last_run 포함)
+
+헤드리스 실행이다. 사용자에게 되묻지 말고, 판단이 필요하면 보수적으로 처리한 뒤
+그 사실을 리포트에 남겨라. 실행이 실패하면 실패 자체를 알림으로 보내라.'
+
+echo "=== 시작: $(date '+%Y-%m-%d %H:%M:%S') ===" | tee -a "$LOG"
+
+claude -p "$PROMPT" \
+  --permission-mode bypassPermissions \
+  --model opus \
+  >> "$LOG" 2>&1
+
+RC=$?
+
+# ── HTML 산출물 기록 ────────────────────────────────────────────────
+# 에이전트가 남기는 서술과 별개로 파일 사실만 기계적으로 남긴다. 에이전트가 중간에
+# 죽어도 HTML 이 갱신됐는지 아닌지는 이 블록만 보면 판별된다.
+{
+  echo "--- HTML 산출물 ---"
+  HTML="$ROOT/result/latest.html"
+  if [ -f "$HTML" ]; then
+    SIZE=$(stat -c %s "$HTML" 2>/dev/null || echo '?')
+    MTIME=$(date -r "$HTML" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo '?')
+    echo "latest.html  $SIZE 바이트  갱신 $MTIME"
+    # 이번 실행에서 갱신됐는지 — 러너 시작 시각(epoch)과 파일 mtime 을 비교한다.
+    # 로그 파일과 비교하면 tee 가 계속 append 해서 mtime 이 밀리므로 쓸 수 없다.
+    HTML_EPOCH=$(stat -c %Y "$HTML" 2>/dev/null || echo 0)
+    if [ "$HTML_EPOCH" -ge "$START_EPOCH" ]; then
+      echo "  -> 이번 회차에서 갱신됨"
+    else
+      echo "  -> [경고] 이번 회차에서 갱신되지 않음 (직전 회차 파일 그대로)"
+    fi
+  else
+    echo "[경고] latest.html 이 없습니다 — HTML 리포트가 생성되지 않았습니다."
+  fi
+  NEWEST_ARCHIVE=$(ls -1t "$ROOT/result/archive"/*.html 2>/dev/null | head -1)
+  [ -n "$NEWEST_ARCHIVE" ] && echo "직전 회차 보관: ${NEWEST_ARCHIVE#$ROOT/}"
+  echo "아카이브 총 $(ls -1 "$ROOT/result/archive"/*.html 2>/dev/null | wc -l)개"
+  echo "--- 캘린더 일정 ---"
+  if [ -f "$ROOT/calendar_event.json" ]; then
+    cat "$ROOT/calendar_event.json"
+  else
+    echo "[경고] calendar_event.json 없음 — 일정이 등록되지 않았습니다."
+  fi
+} >> "$LOG" 2>&1
+
+echo "=== 종료 (rc=$RC): $(date '+%Y-%m-%d %H:%M:%S') ===" | tee -a "$LOG"
+
+# 오래된 로그 정리 (90일)
+find "$LOGDIR" -name '*.log' -mtime +90 -delete 2>/dev/null
+
+exit $RC

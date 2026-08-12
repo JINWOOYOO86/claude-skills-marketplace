@@ -1,0 +1,9 @@
+{
+  "name": "rfp-scout",
+  "description": "국가 R&D 공고 포털(IRIS 등)을 등록해 둔 연구주제로 훑어, 공고 첨부 RFP 원문과 대조해 관련 건만 알림·메일 초안·분석리포트로 보고하는 스킬. 주 1회 자동 모니터링 루틴 설치 템플릿과 IRIS 수집 스크립트를 포함한다.",
+  "version": "1.0.0",
+  "author": {
+    "name": "jinwooyoo",
+    "email": "tomttlr@gmail.com"
+  }
+}
