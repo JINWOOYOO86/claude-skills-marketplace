@@ -35,7 +35,7 @@ IRIS 등 국가 R&D 공고 포털을 등록해 둔 연구주제로 훑고, **공
 
 ## 기여
 
-이 저장소는 편집 원본이자 배포 원본입니다. main 직접 push는 막혀 있으며, 모든 변경은 브랜치 → PR → 리뷰 승인 → squash 머지로 들어옵니다. 작업 전 [CONTRIBUTING.md](CONTRIBUTING.md)를 읽어 주세요.
+이 저장소는 편집 원본이자 배포 원본입니다. main 직접 push는 막혀 있으며(저장소 관리자만 예외), 모든 변경은 브랜치 → PR → 리뷰 승인 → squash 머지로 들어옵니다. 작업 전 [CONTRIBUTING.md](CONTRIBUTING.md)를 읽어 주세요.
 
 ---
 
