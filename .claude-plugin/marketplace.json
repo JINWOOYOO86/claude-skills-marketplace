@@ -16,6 +16,11 @@
       "name": "rfp-scout",
       "description": "국가 R&D 공고 탐색·주간 모니터링 스킬. IRIS 등 공고 포털을 훑어 첨부 RFP 원문을 등록해 둔 연구주제와 대조하고, 관련 건만 알림·메일 초안·분석리포트로 보고한다. 주 1회 자동 실행 루틴 템플릿과 IRIS 수집기·HWP/PDF 추출기를 포함. '공고 찾아줘', 'IRIS 공고', '낼 만한 과제 있나', '공고 모니터링' 요청 시 트리거.",
       "source": "./plugins/rfp-scout"
+    },
+    {
+      "name": "rfp-proposal-harness",
+      "description": "R&D 연구계획서 자동화 하네스 — 공고문 분석·기술/시장/정책/특허 조사·그림/HWPX 작성·6인 평가위원단 검수까지 14개 전문 에이전트가 이어 쓰는 파이프라인. 평가위원단이 전원 95점이 될 때까지 개정↔재평가를 반복한다. '연구계획서 작성', 'R&D 제안서', '평가위원단 검수', '95점까지 고도화' 요청 시 트리거. 공고 탐색(Phase 0.5)은 공개 플러그인 rfp-scout@jinwoo-skills 가 담당한다.",
+      "source": "./plugins/rfp-proposal-harness"
     }
   ]
 }
