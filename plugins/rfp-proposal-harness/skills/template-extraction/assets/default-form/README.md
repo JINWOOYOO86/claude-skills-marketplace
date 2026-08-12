@@ -4,8 +4,9 @@
 
 | 파일 | 내용 |
 |---|---|
-| `default_proposal_form.hwpx` | 빈 양식 원본(52KB). 목차 골격 + 표 2개(연차별 목표·추진일정 간트) |
-| `default_form_rules.md` | 위 파일에서 **미리 추출해 둔 규칙표**. `01_template_rules.md` 와 같은 형식 |
+| `default_proposal_form.hwpx` | 빈 양식 원본. 목차 골격 + **[표 A] 단계별·연차별 목표** / **[표 B] 추진일정 간트(1차년도 월 단위)** |
+| `default_proposal_form.pdf` | 같은 양식의 열람·인쇄용(3쪽). **[표 A]·[표 B]의 실제 형상은 여기서 눈으로 확인**하는 게 빠르다 |
+| `default_form_rules.md` | 위 두 파일에서 교차 확인해 **미리 추출해 둔 작성 가이드라인 겸 규칙표**. `01_template_rules.md` 와 같은 형식 |
 
 ## 왜 두는가
 
@@ -18,8 +19,8 @@
 과기정통부-연구재단 연구개발계획서(PART1 요약문 + PART2 본문)와 산업부-산기평 사업계획서의 **공통(교집합) 항목만 추출해 경량화**한 구조다. 특정 부처 전용 항목(예: IRIS 전용 별지, 기관 서약서)은 들어 있지 않다.
 
 - 특정 부처 공고에 낼 때는 **그 공고의 첨부 서식이 항상 우선**한다. 이 양식은 서식이 없을 때만 쓴다.
-- 개인정보·기관 식별정보는 들어 있지 않다. 도입 시 HWPX 메타데이터(`Contents/content.hpf`)의 `creator`·`lastsaveby` 작성자 정보를 제거했다.
-  → **양식을 교체할 때도 반드시 같은 처리를 할 것.** 본문(`section*.xml`)만 보면 놓친다. 검사 대상은 `.xml` 뿐 아니라 **`.hpf`·`.rdf`·`Preview/PrvText.txt`** 까지다.
+- 개인정보·기관 식별정보는 들어 있지 않다. 도입 시 HWPX 메타데이터(`Contents/content.hpf`)의 `creator`·`lastsaveby` 작성자 정보와 PDF 메타데이터(`title`·`creator`·`producer`)를 제거했다.
+  → **양식을 교체할 때도 반드시 같은 처리를 할 것.** 본문(`section*.xml`)만 보면 놓친다. 검사 대상은 `.xml` 뿐 아니라 **`.hpf`·`.rdf`·`Preview/PrvText.txt`**, PDF는 **문서 메타데이터**까지다.
   스크럽 후 한글 COM으로 열림·쪽수를 대조해 파일이 깨지지 않았는지 확인한다(원본 3p = 스크럽본 3p로 확인).
 
 ## 교체하려면

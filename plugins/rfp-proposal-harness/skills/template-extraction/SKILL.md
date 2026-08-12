@@ -56,7 +56,10 @@ cp "$CLAUDE_PLUGIN_ROOT/skills/template-extraction/assets/default-form/default_f
 | 경로 | 내용 |
 |---|---|
 | `assets/default-form/default_proposal_form.hwpx` | 기본 양식 원본. 폴백 서식이자 **HWPX 조립 시 `--header` 스타일 참조원** |
-| `assets/default-form/default_form_rules.md` | 위 파일의 사전 추출 규칙표(폴백 시 그대로 복사) |
-| `assets/default-form/README.md` | 양식의 성격·교체 절차 |
+| `assets/default-form/default_proposal_form.pdf` | 같은 양식의 열람용(3쪽). **[표 A]·[표 B] 형상 확인은 이쪽이 빠르다** |
+| `assets/default-form/default_form_rules.md` | 사전 추출 **작성 가이드라인 겸 규칙표**(폴백 시 그대로 복사) — 분량 원단위·체크리스트 포함 |
+| `assets/default-form/README.md` | 양식의 성격·교체 절차·스크럽 규율 |
+
+**기본 양식으로 쓸 때 자주 어기는 3가지**(전부 실측 적발): ⑴ **[표 B] 간트는 1차년도 월 단위 12칸**이다 — 분기×4개년 표는 위반 ⑵ KPI 표에 **평가환경** 열이 빠진다(양식은 단위·기준값·목표치·평가방법·평가환경 5요소를 요구) ⑶ 2-2는 **[표 A] 형식(구분/연차/목표)**이어야 하며 서술로 대체하지 않는다.
 
 **왜 표로 만드나:** `hwpx-writer`가 산문을 해석하지 않고 항목/값을 직접 매핑해 서식을 적용하기 때문. 목차 항목명은 원문 그대로 유지해야 작성·검수가 어긋나지 않는다.
