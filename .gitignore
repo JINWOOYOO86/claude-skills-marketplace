@@ -1,0 +1,12 @@
+# 파이썬 빌드 산출물 — 저장소에 두지 않는다(버전마다 쌓이고 경로가 박힐 수 있다)
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 편집기·OS
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# 로컬 전용 자산은 ~/.claude/local/ 에 둔다 (여기 두지 말 것)
