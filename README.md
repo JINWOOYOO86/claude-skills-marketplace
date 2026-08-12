@@ -4,8 +4,8 @@
 
 ```
 /plugin marketplace add JINWOOYOO86/claude-skills-marketplace
-/plugin install kepco-tes@jinwoo-skills
 /plugin install rfp-scout@jinwoo-skills
+/plugin install rfp-proposal-harness@jinwoo-skills
 ```
 
 ## 수록 플러그인
@@ -21,17 +21,15 @@ IRIS 등 국가 R&D 공고 포털을 등록해 둔 연구주제로 훑고, **공
 
 "우리 분야 낼 만한 공고 있나", "IRIS 공고 훑어줘"로 트리거됩니다.
 
-### `kepco-tes` — 한전 축냉설비 설치계획서 검토
+### `rfp-proposal-harness` — R&D 연구계획서 자동화 하네스
 
-한국전력공사(KEPCO) 심야전력 축냉설비(TES) 설치계획서를 받아 지침 적합성을 단계별로 검토하고, 결과를 엑셀로 정리합니다.
+공고문 분석부터 기술·시장·정책·특허 조사, 그림·HWPX 작성, 평가위원단 검수까지 14개 전문 에이전트가 이어 쓰는 파이프라인입니다.
 
-- 설치계획서(PDF/HWP/스캔 이미지) 판독 → 체크리스트 검증
-- 건물부하계산서·운전계획서·설비사양 산출 (수식 포함 xlsx)
-- 오류 카탈로그 기반 불일치 자동 검출, 재현성 검증 스크립트 포함
+- 6인 평가위원단(기술성·실현가능성·사업화·근거정합성·형식규정 + 위원장)이 100점 척도로 채점
+- 전원 95점이 될 때까지 개정 ↔ 재평가를 반복
+- 공고 탐색 단계(Phase 0.5)는 `rfp-scout` 이 담당 — 함께 설치하면 이어집니다
 
-설치계획서 파일을 첨부하면 스킬이 자동 트리거됩니다.
-
-문서에 등장하는 현장명은 익명 예시(`A빌딩`)이며, `assets/forms/`의 `.hwp` 2건은 한전 공식 빈 서식입니다.
+"연구계획서 작성해줘", "평가위원단 검수", "95점까지 고도화"로 트리거됩니다.
 
 ---
 

@@ -8,11 +8,6 @@
   },
   "plugins": [
     {
-      "name": "kepco-tes",
-      "description": "한국전력공사(KEPCO) 심야전력 축냉설비(TES) 설치계획서 검토 스킬. 설치계획서(PDF/HWP/이미지)를 판독해 지침 적합성을 검증하고 부하계산서·운전계획서·설비사양을 엑셀로 산출한다.",
-      "source": "./plugins/kepco-tes"
-    },
-    {
       "name": "rfp-scout",
       "description": "국가 R&D 공고 탐색·주간 모니터링 스킬. IRIS 등 공고 포털을 훑어 첨부 RFP 원문을 등록해 둔 연구주제와 대조하고, 관련 건만 알림·메일 초안·분석리포트로 보고한다. 주 1회 자동 실행 루틴 템플릿과 IRIS 수집기·HWP/PDF 추출기를 포함. '공고 찾아줘', 'IRIS 공고', '낼 만한 과제 있나', '공고 모니터링' 요청 시 트리거.",
       "source": "./plugins/rfp-scout"
