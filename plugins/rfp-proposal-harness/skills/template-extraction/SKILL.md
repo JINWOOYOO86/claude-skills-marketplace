@@ -15,7 +15,7 @@ description: 연구계획서 양식(HWPX/PDF)에서 작성 목차·폰트·여�
 |---|---|---|
 | 1 | **사용자가 지정한 양식 파일** | 경로·첨부로 명시된 서식이 있으면 무조건 이것 |
 | 2 | **공고 첨부 서식** | `00_announcement.md`·`00_raw/` 의 「작성/제출」 대상 서식 |
-| 3 | **기본 양식(폴백)** | 위 둘이 모두 없을 때 — `assets/default-form/default_proposal_form.hwpx` |
+| 3 | **기본 양식(폴백)** | 위 둘이 모두 없을 때 — `assets/default-form/default_proposal_form.pdf` (규칙의 유일한 출처) |
 
 **1·2가 없다고 멈추지 않는다.** 3으로 진행하되 아래 두 가지를 반드시 한다.
 
@@ -55,8 +55,9 @@ cp "$CLAUDE_PLUGIN_ROOT/skills/template-extraction/assets/default-form/default_f
 
 | 경로 | 내용 |
 |---|---|
-| `assets/default-form/default_proposal_form.hwpx` | 기본 양식 원본. 폴백 서식이자 **HWPX 조립 시 `--header` 스타일 참조원** |
-| `assets/default-form/default_proposal_form.pdf` | 같은 양식의 열람용(3쪽). **[표 A]·[표 B] 형상 확인은 이쪽이 빠르다** |
+| `assets/default-form/default_proposal_form.pdf` | **양식 원본(3쪽)**. 규칙의 유일한 출처이며 [표 A]·[표 B] 실물은 2~3쪽 |
+| `assets/default-form/default_proposal_form.md` | 위 PDF의 **전사본**. 목차 골격을 복사해 작성 시작점으로 쓴다 |
+| `assets/default-form/default_form_style.json` | HWPX 조립용 스타일맵 |
 | `assets/default-form/default_form_rules.md` | 사전 추출 **작성 가이드라인 겸 규칙표**(폴백 시 그대로 복사) — 분량 원단위·체크리스트 포함 |
 | `assets/default-form/README.md` | 양식의 성격·교체 절차·스크럽 규율 |
 
