@@ -36,14 +36,20 @@ skills/rfp-scouting/
 ├ references/weekly-monitor.md   주간 모니터링 절차·리포트/알림 템플릿·상태 파일 스키마
 ├ scripts/iris_fetch.py          IRIS 목록·상세·첨부 수집 (표준 라이브러리만)
 ├ scripts/extract_attachment.py  PDF·HWPX·HWP·ZIP → 텍스트
+├ assets/profile/                연구주제·키워드 등록양식 (빈 양식 + 작성 예시)  ← 사용자가 고치는 곳
 └ assets/routine-scaffold/       주 1회 자동 실행 루틴 설치 템플릿
 agents/rfp-scout.md              탐색 전담 에이전트
 ```
 
 ## 쓰는 법
 
+**등록양식부터** — `skills/rfp-scouting/assets/profile/profile.template.md` 를 복사해 `profile.md` 로 채운다.
+연구주제 서술 3~5줄, 키워드, 자격·규모 하한, 알림 설정이 전부다. 채워진 예시가 같은 폴더에 있다.
+**이 파일 하나가 설정의 전부이며, 언제든 직접 고칠 수 있다** — 스킬은 맨 아래 「실행 이력」 표만 자동 갱신하고
+사용자가 쓴 내용은 요청 없이 건드리지 않는다.
+
 **온디맨드** — "우리 분야 낼 만한 공고 있나", "IRIS 공고 훑어줘"라고 하면 스킬이 트리거된다.
-첫 실행에서 연구주제·키워드·자격·규모 하한을 물어 프로파일 파일을 만들고, 이후에는 그 파일을 기준으로 돈다.
+프로파일이 없으면 위 양식대로 항목을 물어 만들어 주고, 이후에는 그 파일을 기준으로 돈다.
 
 **주간 자동 모니터링** — `assets/routine-scaffold/`의 템플릿으로 루틴 폴더를 만들고 스케줄러에 건다.
 밤에 돌려두고 다음날 아침 결과 HTML 한 파일만 확인하는 흐름이다. 히트가 없으면 알림도 오지 않는다.

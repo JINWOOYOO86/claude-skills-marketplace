@@ -13,7 +13,7 @@
 |------|------|
 | `run_rfp_scout.sh.template` | 러너 — `claude -p`로 주간 모니터링 프롬프트 실행. 소유 PC 가드·HTML 검증 포함 |
 | `run_rfp_scout.bat.template` | Windows 작업 스케줄러가 부르는 진입점 (wsl.exe 경유) |
-| `profile.md.template` | 관심 연구주제·키워드·자격·알림 설정 |
+| (프로파일 양식) | 한 단계 위 `assets/profile/` 에 있다 — 이 스킬의 유일한 설정 파일이라 루틴과 분리해 뒀다 |
 | `owner.txt.template` | 이 루틴을 돌리는 PC 이름 — 동기화 폴더 공유 시 중복 실행 방지 |
 
 ## 설치 절차
@@ -37,7 +37,8 @@
   (WSL에서 Windows 폴더를 쓰면 `/mnt/c/Users/<user>/.../RFP_weekly` 형식)
 - `.sh`의 `{{RESULT_URL_FALLBACK}}` → 결과 HTML 기본 링크
   (예: `file:///C:/Users/<user>/.../result/latest.html`)
-- `profile.md.template`의 `{{ }}` 항목을 채워 `profile.md`로 저장
+- `../profile/profile.template.md` 의 `{{ }}` 항목을 채워 루틴 폴더에 `profile.md`로 저장
+  (작성 예시는 `../profile/profile.example.md`)
 - `owner.txt.template`의 `{{HOSTNAME}}` → `hostname` 출력값으로 바꿔 `owner.txt`로 저장
 - `.template` 확장자를 떼고 `.sh`/`.bat`는 `scripts/`에 배치
 
