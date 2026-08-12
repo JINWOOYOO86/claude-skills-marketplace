@@ -75,5 +75,5 @@
     "7": "13pt"
   },
   "confidence": "corrected-from-template-measurement",
-  "_note": "기본 양식 전용 스타일맵. heading_1=charPr5(16pt, 색을 #000000 으로 교정한 뒤 사용), heading_2=charPr7(13pt 굵게, header 에 신설해야 함), body=charPr6(11pt 함초롬돋움), table=charPr2(9pt). 절차는 default_form_rules.md 3절 참조."
+  "_note": "도구 기본 템플릿(build_hwpx --header 생략) 기준 스타일맵. heading_1=charPr5(16pt, 색 #2E74B5→#000000 교정), heading_2=charPr7(13pt 굵게, 헤더에 신설), body=charPr6(11pt, 글꼴 함초롬돋움→돋움 교체), table=charPr2(9pt). 절차는 default_form_rules.md 3절."
 }

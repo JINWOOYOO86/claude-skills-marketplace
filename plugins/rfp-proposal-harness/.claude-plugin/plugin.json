@@ -1,7 +1,7 @@
 {
   "name": "rfp-proposal-harness",
   "description": "R&D 연구계획서 자동화 하네스 — 공고문 분석·기술/시장/정책/특허 조사·그림/HWPX 작성·6인 평가위원단 검수까지 14개 전문 에이전트가 이어 쓰는 파이프라인. 평가위원단이 전원 95점이 될 때까지 개정↔재평가를 반복한다. '연구계획서 작성', 'R&D 제안서', '평가위원단 검수', '95점까지 고도화' 요청 시 트리거. 공고 탐색(Phase 0.5)은 별도 플러그인 rfp-scout@jinwoo-skills 가 담당한다.",
-  "version": "0.11.1",
+  "version": "0.12.0",
   "author": {
     "name": "jinwooyoo",
     "email": "tomttlr@gmail.com"
