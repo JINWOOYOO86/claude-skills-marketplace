@@ -46,6 +46,8 @@ Phase 4  평가위원단 6인 병렬채점 → 위원장 종합 → REVISE면 �
 1. `Agent(subagent_type=announcement-analyst, model=opus)` 실행 → `00_announcement.md`, `00_rfp_selected.md`.
    - STATUS가 `NEEDS_USER_INPUT`이면 **사용자에게 RFP 선택/주제 입력을 받은 뒤** 재호출. 임의 진행 금지.
 2. `Agent(subagent_type=template-extractor, model=opus)` 실행 → `01_template_rules.md`.
+   - 양식 우선순위는 ①사용자 지정 → ②공고 첨부 → ③**하네스 동봉 기본 양식**. **서식이 없어도 멈추지 않는다.**
+   - 기본 양식으로 폴백하면 `01_template_rules.md` 에 `양식출처: 기본양식(폴백)` 이 찍힌다. 이 경우 사용자에게 알리고, 실제 제출용이면 공고 지정 서식을 요청한다.
 
 ## Phase 2: 조사 (팬아웃)
 1. **먼저** `tech-trend-researcher` 실행 → `10_project_title.md`(과제명·키워드), `11_tech_trend.md`.
