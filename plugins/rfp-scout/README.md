@@ -74,5 +74,3 @@ python3 skills/rfp-scouting/scripts/extract_attachment.py raw/ --outdir extracte
 - 포털 엔드포인트는 사이트 개편으로 바뀔 수 있다. 깨지면 `references/portal-sources.md`를 갱신하는 것이 이 스킬의 유지보수다.
 - 수집은 공개 페이지에 대한 통상적인 조회다. 과도한 동시 요청을 보내지 않는다(주 1회 20~30건 수준).
 - 예시로 등장하는 연구주제·프로파일은 전부 채워 넣기용 자리표시자다.
-
-<!-- autopush 훅 동작 확인용 임시 줄 -->
