@@ -7,6 +7,7 @@
 | `default_proposal_form.hwpx` | 빈 양식 원본. 목차 골격 + **[표 A] 단계별·연차별 목표** / **[표 B] 추진일정 간트(1차년도 월 단위)** |
 | `default_proposal_form.pdf` | 같은 양식의 열람·인쇄용(3쪽). **[표 A]·[표 B]의 실제 형상은 여기서 눈으로 확인**하는 게 빠르다 |
 | `default_form_rules.md` | 위 두 파일에서 교차 확인해 **미리 추출해 둔 작성 가이드라인 겸 규칙표**. `01_template_rules.md` 와 같은 형식 |
+| `default_form_style.json` | HWPX 조립용 **교정 스타일맵**(본문 charPr6 11pt / 표 charPr2 9pt / 장제목 charPr5 16pt 검정 / 절제목 charPr7 13pt 굵게) |
 
 ## 왜 두는가
 

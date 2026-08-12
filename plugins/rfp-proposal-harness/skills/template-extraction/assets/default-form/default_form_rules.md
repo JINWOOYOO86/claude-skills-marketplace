@@ -50,7 +50,29 @@
 | 줄간격 | **160%** (일부 문단 150%·130%) | `header.xml` `paraPr` |
 | 글꼴 | 함초롬돋움 / 함초롬바탕 (임베드 없음) | `header.xml` `hh:fontfaces` |
 
-**HWPX 조립 시** `analyze_template.py` 의 `confidence: estimated` 스타일맵은 전 항목이 charPr 0으로 뭉개지므로 위 값으로 수동 교정하고, `build_hwpx.py` 의 기본 여백(20mm)도 위 값으로 치환한다.
+**HWPX 조립 시** `analyze_template.py` 의 `confidence: estimated` 스타일맵은 전 항목이 charPr 0으로 뭉개지므로 아래 스타일맵을 쓰고, `build_hwpx.py` 의 기본 여백(20mm)도 위 값으로 치환한다. 동봉 `default_form_style.json` 이 교정본이다.
+
+### ⚠️ 서식 적용 시 함정 3개 (전부 실측)
+
+**⑴ 양식 파일의 본문 서식을 그대로 베끼면 안 된다.** 빈 양식은 **문단 135개가 전부 `charPr 0`(10pt 함초롬바탕)** 이다 — 제목도 표 셀도 같다. 즉 파일 자체에는 서식이 적용돼 있지 않고, **규정은 안내문 문장("A4 / 돋움 11pt / 줄간격 160%")** 에 있다. 따라서 본문은 **`charPr 6` = 11pt 함초롬돋움**으로 쓰는 것이 맞고, 이것이 양식 파일의 10pt 바탕과 달라 보이는 것은 정상이다.
+
+**⑵ `charPr 5`(장 제목용 16pt)는 색이 `#2E74B5` 파랑이다.** Word Heading 1 색이 header 에 정의만 되어 남은 것으로, **양식 본문 어디에도 파란 글자는 쓰이지 않는다**(실제 사용 색은 `#000000` 하나뿐). 그대로 쓰면 장 제목이 파랗게 인쇄되므로 **`textColor` 를 `#000000` 으로 교정한 뒤 사용**한다.
+
+```bash
+# 장 제목 색 교정 + 절 제목용 charPr 7 신설(13pt 함초롬돋움 굵게)
+python3 - <<'EOF'
+import re
+h=open('ref_header.xml',encoding='utf-8').read()
+h=h.replace('id="5" height="1600" textColor="#2E74B5"','id="5" height="1600" textColor="#000000"')
+c6=re.search(r'<hh:charPr id="6".*?</hh:charPr>',h,re.S).group(0)
+c7=c6.replace('id="6"','id="7"').replace('height="1100"','height="1300"').replace('<hh:underline','<hh:bold/><hh:underline')
+h=h.replace(c6,c6+c7,1).replace('<hh:charProperties itemCnt="7">','<hh:charProperties itemCnt="8">',1)
+open('ref_header.xml','w',encoding='utf-8').write(h)
+EOF
+```
+절 제목(1-1 등)에 쓸 크기가 header 에 **없기 때문**에 신설이 필요하다. 신설하지 않으면 절 제목이 본문과 같은 11pt로 나가 위계가 사라진다.
+
+**⑶ `charPrIDRef="0"` 이 표마다 1건씩 보이는 것은 누수가 아니다.** `<hp:tbl>` 을 **감싸는 run** 의 속성이라 인쇄되는 글자가 없고, 실제 셀은 전부 `charPr 2`(9pt)다. 표 안을 정규식으로 치환하려 들지 말 것 — 텍스트 추출 정규식이 표 첫 셀 문자열을 이 run 소속으로 잘못 묶어 보여준다.
 
 ## 4. 목차 트리와 항목별 요구 내용
 
