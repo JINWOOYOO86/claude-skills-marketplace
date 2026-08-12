@@ -11,6 +11,15 @@ description: 조사·그림 산출물과 양식 규칙을 종합해 연구계획
 
 ### 1. 양식 규칙 로드
 `01_template_rules.md`의 목차·서식을 최우선 기준으로 삼는다. **목차 항목을 임의 추가/삭제하지 않는다.**
+둘째 줄 `양식출처:` 를 확인한다 — `기본양식(폴백)` 이면 공고 지정 서식이 없다는 뜻이므로, 분량·필수기재 판단을 사용자에게 올릴 때 이 사실을 함께 알린다.
+
+**스타일 참조 HWPX**: `build_hwpx.py --header <ref_header.xml>` 에 넣을 레퍼런스는 ①공고 첨부 양식 파일 → ②없으면 동봉 기본 양식이다.
+```bash
+REF="$CLAUDE_PLUGIN_ROOT/skills/template-extraction/assets/default-form/default_proposal_form.hwpx"
+python3 -c "import zipfile,sys;open('ref_header.xml','wb').write(zipfile.ZipFile(sys.argv[1]).read('Contents/header.xml'))" "$REF"
+```
+기본 양식의 실측 스타일: 본문 `charPr6`=11pt 함초롬돋움 / 표 `charPr2`=9pt / 장제목 `charPr5`=16pt / 캡션 `charPr4`, 여백 좌우 8504·상 5668·하 4252, 줄간격 160%.
+`analyze_template.py` 의 `confidence: estimated` 결과는 전 항목 charPr 0으로 뭉개지므로 위 값으로 수동 교정하고, `build_hwpx.py` 의 기본 여백(20mm)도 치환해야 한다.
 
 ### 2. 섹션-근거 매핑
 각 목차 항목에 조사 산출물을 매핑해 본문을 작성한다:

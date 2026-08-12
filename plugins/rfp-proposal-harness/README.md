@@ -15,6 +15,16 @@ Phase 4  평가위원단 6인 병렬채점 → 위원장 종합 → 전원 95점
 
 데이터는 `_workspace/{순번}_{내용}.md` 파일로 전달(감사 추적·부분 재실행).
 
+## 기본 연구계획서 양식
+
+양식 우선순위는 **①사용자 지정 → ②공고 첨부 서식 → ③하네스 동봉 기본 양식**이다.
+①②가 없어도 멈추지 않고 ③으로 진행하며, 이때 `01_template_rules.md` 에 `양식출처: 기본양식(폴백)` 이 기록된다.
+
+동봉 위치는 `skills/template-extraction/assets/default-form/` — 빈 양식 원본(`default_proposal_form.hwpx`),
+사전 추출 규칙표(`default_form_rules.md`), 성격·교체 절차(`README.md`).
+과기정통부-연구재단 계획서와 산업부-산기평 사업계획서의 **공통 항목만 경량화**한 범용 구조(0.요약문 / 1.배경·필요성 / 2.목표 / 3.내용·수행방법 / 4.기대효과·활용, 10p 내외)이며,
+HWPX 조립 시 `--header` 스타일 참조원으로도 쓰인다. **실제 제출 시에는 그 공고의 첨부 서식이 항상 우선한다.**
+
 ## 에이전트 (14)
 - **자료조사·분석**: announcement-analyst, template-extractor
 - **작성**: tech-trend / market / policy / patent-researcher, figure-designer, hwpx-writer
