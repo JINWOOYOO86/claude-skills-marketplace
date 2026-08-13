@@ -15,9 +15,9 @@ description: R&D 연구계획서 자동 작성 전체 워크플로우를 조율�
 ```
 Phase 0.5 공고탐색(rfp-scout@jinwoo-skills)                                      [선택: 공고 미정일 때만·별도 플러그인]
 Phase 1  공고문분석(announcement-analyst) → 템플릿추출(template-extractor)      [순차]
-Phase 2  기술동향(tech-trend-researcher)                                        [먼저: 과제명·키워드 확정]
-         → 시장(market-researcher) ∥ 정책(policy-researcher)                    [병렬 팬아웃]
-         → 특허(patent-researcher)                                             [시장 후: 기업목록 사용]
+Phase 2  기술동향(researcher: 기술동향)                                        [먼저: 과제명·키워드 확정]
+         → 시장(researcher: 시장) ∥ 정책(researcher: 정책)                    [병렬 팬아웃]
+         → 특허(researcher: 특허)                                             [시장 후: 기업목록 사용]
 Phase 3  그림(figure-designer) ∥ 준비 → HWPX 조립(hwpx-writer)                   [작성]
 Phase 4  평가위원단 6인 병렬채점 → 위원장 종합 → REVISE면 개정 (전원 95점까지)   [검수·고도화]
 ```
@@ -50,12 +50,12 @@ Phase 4  평가위원단 6인 병렬채점 → 위원장 종합 → REVISE면 �
    - 기본 양식으로 폴백하면 `01_template_rules.md` 에 `양식출처: 기본양식(폴백)` 이 찍힌다. 이 경우 사용자에게 알리고, 실제 제출용이면 공고 지정 서식을 요청한다.
 
 ## Phase 2: 조사 (팬아웃)
-1. **먼저** `tech-trend-researcher` 실행 → `10_project_title.md`(과제명·키워드), `11_tech_trend.md`.
+1. **먼저** `Agent(subagent_type=researcher, prompt="축: 기술동향")` 실행 → `10_project_title.md`(과제명·키워드), `11_tech_trend.md`.
    - 과제명은 파급이 크므로, 필요하면 확정 과제명을 사용자에게 1회 확인받는다.
 2. `10_project_title.md` 완료 후 **병렬 실행**(`run_in_background: true`):
-   - `market-researcher` → `12_market.md`
-   - `policy-researcher` → `13_policy.md`
-3. `market-researcher` 완료 후 `patent-researcher` 실행(기업 목록 사용) → `14_patent.md`.
+   - `Agent(subagent_type=researcher, prompt="축: 시장")` → `12_market.md`
+   - `Agent(subagent_type=researcher, prompt="축: 정책")` → `13_policy.md`
+3. 시장 축 완료 후 `Agent(subagent_type=researcher, prompt="축: 특허")` 실행(기업 목록 사용) → `14_patent.md`.
    - 시장조사가 지연되면 특허는 키워드만으로 시작하되 기업 축 생략을 표시.
 
 ## Phase 3: 작성
@@ -100,4 +100,4 @@ Phase 4  평가위원단 6인 병렬채점 → 위원장 종합 → REVISE면 �
 - **정상 흐름**: 공고문 PDF 입력 → (Phase 0.5 건너뜀) → RFP 1개 자동특정 → 과제명 확정(사용자 승인) → 4개 조사 병렬 완료 → 그림+HWPX 조립 → 평가위원 PASS → 최종 계획서 산출.
 - **에러 흐름 1 (RFP 다수)**: 공고에 RFP 3개 → announcement-analyst가 NEEDS_USER_INPUT → 사용자 선택 대기 → 선택 후 재개.
 - **에러 흐름 2 (검수 실패)**: 위원단 최저점 82(근거정합성 위원이 무근거 수치 지적) → hwpx-writer가 해당 섹션 보완 → 재평가. 전원 95+까지 반복, 4회 후에도 미달·정체면 잔여 리스크 명시 후 종료.
-- **부분 재실행**: "특허조사만 다시" → Phase 0에서 부분 재실행 판정 → patent-researcher만 재호출 → `14_patent.md` 갱신 → hwpx-writer에 반영 필요 여부 안내.
+- **부분 재실행**: "특허조사만 다시" → Phase 0에서 부분 재실행 판정 → researcher(축: 특허)만 재호출 → `14_patent.md` 갱신 → hwpx-writer에 반영 필요 여부 안내.
