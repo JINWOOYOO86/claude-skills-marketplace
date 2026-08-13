@@ -103,7 +103,9 @@ def grid_check(root):
         if len(rows) < 3:
             continue
         last = rows[-1]
-        if not last or not re.search(r"계|합계|총계", last[0]):
+        # ★ 함정(실측): re.search(r"계") 는 「2단계」의 '계' 에도 매칭돼 거짓 FAIL 을 낸다.
+        #    합계 행은 첫 셀이 「계/합계/총계/소계」 **그 자체**일 때만 인정한다(부분문자열 금지).
+        if not last or not re.fullmatch(r"\s*(계|합계|총계|소계)\s*", last[0]):
             continue
         # 열별 세로합 대조 (헤더 1행 가정, 마지막 행은 계)
         for c in range(1, min(len(last), min(len(r) for r in rows))):
@@ -184,6 +186,7 @@ def main():
     ap.add_argument("--required", help="필수 문자열 목록 파일(1줄 1항목)")
     ap.add_argument("--sections", help="실존 절 목록 파일(1줄 1항목, 예 §2-3)")
     ap.add_argument("--md", help="원고 Markdown — J-14 강조(굵기) 보존 대조용")
+    ap.add_argument("--titles", help="양식 절 제목 목록 파일(1줄 1제목) — J-15 축자 대조용")
     ap.add_argument("--max-para", type=int, default=1000, help="본문 문단 자수 상한")
     ap.add_argument("--json", help="결과 JSON 출력 경로")
     a = ap.parse_args()
@@ -319,6 +322,15 @@ def main():
     else:
         check("J-14 강조(굵기) 보존", napp >= nsrc * 0.5,
               f"원고 {nsrc}개 → 적용 run {napp}개 (정의 {ndef}종)")
+
+    # J-15 절 제목 축자 대조 — 개명·접미추가·띄어쓰기 변형·절 신설을 잡는다
+    if a.titles:
+        want = [l.strip() for l in open(a.titles, encoding="utf-8") if l.strip()]
+        body = re.sub(r"\s+", " ", "\n".join(
+            local_text(p) for p in root.iter(f"{{{HP}}}p")))
+        miss = [t for t in want if re.sub(r"\s+", " ", t) not in body]
+        check("J-15 절 제목 축자 일치", not miss,
+              f"불일치 {len(miss)}건: {miss[:4]}" if miss else f"{len(want)}종 전량 원문 일치")
 
     ok = not fails
     print(f"\n{'='*60}\n{'PASS' if ok else 'FAIL'} — 실패 {len(fails)}건")
