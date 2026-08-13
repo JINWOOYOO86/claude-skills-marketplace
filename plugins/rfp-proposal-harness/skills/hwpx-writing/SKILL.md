@@ -120,7 +120,8 @@ npx -y kordoc@^4 render   30_proposal.hwpx -o preview.svg   # 조판 눈검사(�
 
 ```bash
 S="$CLAUDE_PLUGIN_ROOT/skills/hwpx-writing/scripts"
-python3 $S/gate_hwpx.py   --hwpx 30_proposal.hwpx --expect-tables <직전 판 표 개수> \
+python3 $S/gate_hwpx.py   --hwpx 30_proposal.hwpx --md 30_proposal.md \
+                          --expect-tables <직전 판 표 개수> \
                           --prev <직전 판 hwpx> --required required.txt --sections sections.txt
 python3 $S/gate_regress.py --prev <직전 판 md> --curr 30_proposal.md \
                           --required required.txt --resolved resolved.txt
@@ -152,7 +153,7 @@ python3 $S/gate_regress.py --prev <직전 판 md> --curr 30_proposal.md \
 | **G 조사 반영 완결** | 조사 결론을 **절반만** 옮기지 않는다. 조사파일에서 `계획서에는`·`명기해야`·`그대로 두면`·`각주 필수`·`권고`를 grep해 전량 목록화하고 체크박스로 관리 | 신규 결함 10건 중 8건이 이 표식을 가진 문장이었다(GWP 값만 옮기고 기준연도·출처 누락) |
 | **H 회귀 게이트** | 새 조치를 넣기 전에 **직전 라운드 「완전 해소 확정」 항목을 전수 재검사**. `scripts/gate_regress.py` 사용 | 압축이 직전 라운드 확정분 4건을 되돌림 |
 | **I → J에 흡수** | ~~필수기재 존재 검사~~ **단독 운용 폐지.** **존재 검사 단독은 거짓 통과를 발급한다** | "평가방법 8행 존재" 검사가 통과시킨 표가 산출물에서는 2개로 쪼개져 있었다 |
-| **J 산출물 구조 게이트** | `scripts/gate_hwpx.py` — 표 형상 덤프·고아 표·판 간 형상 diff·표 내부 제외 문단 자수·이중 이스케이프·XML 선언·격자 재검산·§ 참조 실존·필수 문자열. **모든 체크에 「측정 매체」를 명시하고, md 단독 측정 항목에는 「통과」를 발급하지 않는다** | 「존재는 있고 구조가 깨진」 결함 **3건이 전부 존재 검사를 통과**했다(references 참조) |
+| **J 산출물 구조 게이트** | `scripts/gate_hwpx.py` — 표 형상 덤프·고아 표·판 간 형상 diff·표 내부 제외 문단 자수·이중 이스케이프·XML 선언·격자 재검산·§ 참조 실존·필수 문자열·**강조(굵기) 보존(J-14)**. **`--md` 를 반드시 함께 준다** — 없으면 J-14가 원고 대조 없이 INFO로만 지나간다. **모든 체크에 「측정 매체」를 명시하고, md 단독 측정 항목에는 「통과」를 발급하지 않는다** | 「존재는 있고 구조가 깨진」 결함 **4건이 전부 존재 검사를 통과**했다(references §1). 4번째는 **굵은 글씨 594 span 전량 소실** — 본문 텍스트는 멀쩡해서 자수·존재 검사로는 영원히 안 잡힌다 |
 
 **함정 목록**: `references/md-to-hwpx-traps.md` — 마크다운 소스·빌드 파이프라인·**검사 스크립트 자체**의 함정 30여 건.
 새 검사 코드를 짜기 전에 §4(검사 스크립트 함정)를 먼저 읽을 것.

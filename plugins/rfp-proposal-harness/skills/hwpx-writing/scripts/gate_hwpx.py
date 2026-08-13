@@ -124,6 +124,38 @@ def grid_check(root):
     return findings
 
 
+def emphasis_check(parts, md_path):
+    """J-14 강조(굵기) 소실 — 「존재는 있고 구조가 깨진」 결함 계보의 4번째 사례.
+
+    ★ 실측 사고(2026-08-13): 원고에 굵기 span 594개가 있는데 산출물 header.xml 의
+    <hh:bold> 정의가 **0건**이었다. 8라운드 PASS 판정본이 굵은 글씨를 하나도 갖고 있지
+    않았고, 표주석 [주k] "굵은 값은 AR5 기준"이 산출물에서 **지시 대상을 잃은** 상태로
+    8라운드 내내 아무도 적발하지 못했다. 본문 텍스트는 전량 보존돼 있었으므로
+    자수·존재 검사로는 영원히 잡히지 않는다 — 서식 속성을 직접 세야 한다.
+
+    반환: (굵기 charPr 정의 수, 굵기 적용 run 수, 원고 굵기 span 수 또는 None)
+    """
+    hdr = parts.get("Contents/header.xml", b"").decode("utf-8", "replace")
+    bold_ids = set()
+    for m in re.finditer(r'<hh:charPr\b[^>]*\bid="(\d+)"[^>]*>(.*?)</hh:charPr>', hdr, re.S):
+        if "<hh:bold" in m.group(2):
+            bold_ids.add(m.group(1))
+
+    sec = "".join(
+        parts[n].decode("utf-8", "replace")
+        for n in sorted(parts) if re.match(r"Contents/section\d+\.xml$", n)
+    )
+    applied = sum(1 for r in re.findall(r'charPrIDRef="(\d+)"', sec) if r in bold_ids)
+
+    src = None
+    if md_path:
+        try:
+            src = open(md_path, encoding="utf-8").read().count("**") // 2
+        except Exception:
+            src = None
+    return len(bold_ids), applied, src
+
+
 def section_refs(root, valid_sections):
     """§ 상호참조 실존성 — 본문의 §n-m 참조가 실제 절 목록에 있는지.
 
@@ -151,6 +183,7 @@ def main():
     ap.add_argument("--expect-tables", type=int, help="기대 표 개수(선언값). 불일치면 FAIL")
     ap.add_argument("--required", help="필수 문자열 목록 파일(1줄 1항목)")
     ap.add_argument("--sections", help="실존 절 목록 파일(1줄 1항목, 예 §2-3)")
+    ap.add_argument("--md", help="원고 Markdown — J-14 강조(굵기) 보존 대조용")
     ap.add_argument("--max-para", type=int, default=1000, help="본문 문단 자수 상한")
     ap.add_argument("--json", help="결과 JSON 출력 경로")
     a = ap.parse_args()
@@ -272,6 +305,20 @@ def main():
         need = [l.rstrip("\n") for l in open(a.required, encoding="utf-8") if l.strip()]
         miss = [s for s in need if s not in raw]
         check("J-13 필수 문자열 실기재", not miss, f"누락 {len(miss)}건: {miss[:5]}" if miss else f"{len(need)}종 전량")
+
+    # J-14 강조(굵기) 소실 — 본문 텍스트가 전량 보존돼도 서식만 사라질 수 있다
+    ndef, napp, nsrc = emphasis_check(parts, a.md)
+    if nsrc is None:
+        print(f"  INFO  굵기 charPr 정의 {ndef}종 / 적용 run {napp}개 "
+              f"(--md 미지정이라 원고 대조 없음)")
+    elif nsrc == 0:
+        print(f"  INFO  원고에 굵기 표기가 없어 검사 생략 (적용 run {napp}개)")
+    elif ndef == 0:
+        check("J-14 강조(굵기) 보존", False,
+              f"원고 굵기 {nsrc}개인데 산출물 <hh:bold> 정의 0건 — 전량 소실")
+    else:
+        check("J-14 강조(굵기) 보존", napp >= nsrc * 0.5,
+              f"원고 {nsrc}개 → 적용 run {napp}개 (정의 {ndef}종)")
 
     ok = not fails
     print(f"\n{'='*60}\n{'PASS' if ok else 'FAIL'} — 실패 {len(fails)}건")
