@@ -47,8 +47,9 @@ HWPX 빈 양식은 두지 않고, 조립은 kordoc 계획서 프리셋에 PDF �
 
 ## 에이전트 (14)
 - **자료조사·분석**: announcement-analyst, template-extractor
-- **작성**: tech-trend / market / policy / patent-researcher, figure-designer, hwpx-writer
-- **평가위원단 6인**: proposal-evaluator(위원장/부합성·종합), technical-merit, feasibility, impact, evidence-integrity-verifier(근거 게이트), compliance-formatting
+- **조사**: researcher (축: 기술동향·시장·정책·특허 — 축을 지정해 호출)
+- **작성**: figure-designer, hwpx-writer
+- **평가위원단 6인**: proposal-evaluator(위원장/부합성·종합) + evaluator 5인스턴스(축: 기술성·실현가능성·사업화파급·근거정합성·형식규정)
 
 ## 95점 게이트 루프
 

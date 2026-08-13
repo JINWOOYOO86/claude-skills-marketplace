@@ -16,11 +16,11 @@ description: 6인 평가위원단(위원장+기술성+실현가능성+사업화+
 | # | 에이전트 | 산출 | 축 |
 |---|---------|------|----|
 | 1 | proposal-evaluator (위원장) | `49_panel_verdict.md` | 부합성 + 종합·판정 |
-| 2 | technical-merit-evaluator | `41_review_technical.md` | 기술성 |
-| 3 | feasibility-evaluator | `42_review_feasibility.md` | 실현가능성 |
-| 4 | impact-evaluator | `43_review_impact.md` | 사업화·파급 |
-| 5 | evidence-integrity-verifier | `44_review_evidence.md` | 근거·정합성(게이트) |
-| 6 | compliance-formatting-evaluator | `45_review_compliance.md` | 형식·규정 |
+| 2 | evaluator (축: 기술성) | `41_review_technical.md` | 기술성 |
+| 3 | evaluator (축: 실현가능성) | `42_review_feasibility.md` | 실현가능성 |
+| 4 | evaluator (축: 사업화·파급) | `43_review_impact.md` | 사업화·파급 |
+| 5 | evaluator (축: 근거·정합성) | `44_review_evidence.md` | 근거·정합성(게이트) |
+| 6 | evaluator (축: 형식·규정) | `45_review_compliance.md` | 형식·규정 |
 
 ## 워크플로우
 
@@ -55,9 +55,16 @@ description: 6인 평가위원단(위원장+기술성+실현가능성+사업화+
 ③ **【A】 잔여 0**  ④ **규율 H·I·J 전항 통과 + validate VALID**
 
 ### Phase 1: 병렬 채점 (팬아웃)
-위원 2~6을 **병렬 실행**(`Agent(..., model:"opus", run_in_background:true)`):
-- technical / feasibility / impact / evidence / compliance → 각자 `4x_review_*.md` 생성.
-각 결과 첫 줄 `## SCORE: NN/100 STATUS:` 를 수집한다.
+위원 2~6은 **같은 `evaluator` 에이전트에 축만 달리해** 5개 인스턴스를 **한 메시지에 넣어 동시 실행**한다
+(`Agent(subagent_type=evaluator, model:"opus", run_in_background:true, prompt="축: <축이름> …")`).
+
+```
+축: 기술성 / 실현가능성 / 사업화·파급 / 근거·정합성 / 형식·규정
+```
+→ 각자 `4x_review_*.md` 생성. 각 결과 첫 줄 `## SCORE: NN/100 STATUS:` 를 수집한다.
+
+⚠️ **축을 반드시 지정한다.** 축 없이 호출하면 위원이 되묻고 라운드가 멈춘다.
+에이전트 정의는 하나지만 **인스턴스가 분리돼 있어 위원 간 독립성은 그대로**다 — 서로의 채점을 보지 않는다.
 
 ### Phase 2: 위원장 종합 (배리어)
 5개 위원 결과가 모이면 `proposal-evaluator` 실행 → `49_panel_verdict.md`.
@@ -113,4 +120,4 @@ description: 6인 평가위원단(위원장+기술성+실현가능성+사업화+
 - **정상**: 초기 최저 78 → 개정 3회 → 6축 전원 ≥95 → PASS 보고.
 - **근거 게이트**: 기술성 97이지만 evidence 82(허위 특허번호) → REVISE → 특허 교체 → evidence 96 → PASS.
 - **정체**: 최저점이 88→89→89 정체 → 정체 판정 → 시장조사 심화 등 근본 보완 제안 후 중단.
-- **부분 재평가**: "형식만 다시 봐줘" → compliance-formatting-evaluator만 재실행 → 위원장 종합 갱신.
+- **부분 재평가**: "형식만 다시 봐줘" → `evaluator`(축: 형식·규정)만 재실행 → 위원장 종합 갱신.
