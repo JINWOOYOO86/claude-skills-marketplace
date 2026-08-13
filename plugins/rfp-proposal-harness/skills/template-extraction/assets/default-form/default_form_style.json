@@ -75,5 +75,5 @@
     "7": "13pt"
   },
   "confidence": "corrected-from-template-measurement",
-  "_note": "도구 기본 템플릿(build_hwpx --header 생략) 기준 스타일맵. heading_1=charPr5(16pt, 색 #2E74B5→#000000 교정), heading_2=charPr7(13pt 굵게, 헤더에 신설), body=charPr6(11pt, 글꼴 함초롬돋움→돋움 교체), table=charPr2(9pt). 절차는 default_form_rules.md 3절."
+  "_note": "목표 서식값. heading_1=16pt 검정, heading_2=13pt 굵게, body=11pt 돋움, table=9pt, 여백 좌우 8504/상 5668/하 4252, 줄간격 160%. kordoc 프리셋은 이 값을 그대로 주지 않으므로 빌드 후 헤더 패치로 강제한다 — 절차는 default_form_rules.md 3절, 명령 전문은 hwpx-writing 스킬 3절."
 }

@@ -51,28 +51,31 @@ PDF가 규정하는 것은 **A4 / 돋움 11pt / 줄간격 160%** 세 가지뿐�
 | 표 안 글자 | 9pt | 명시 없음 — 분량 관리상 관행 |
 | 장 제목 / 절 제목 | 16pt / 13pt 굵게 | 명시 없음 — 위계 확보용 |
 
-### 조립 절차 — 도구 기본 템플릿 + 헤더 패치
+### 조립 절차 — kordoc 프리셋 + 헤더 패치
 
-`build_hwpx.py` 의 **기본 템플릿(`--header` 생략)** 을 쓴다. 이 템플릿의 `charPr 0~6`(10/10/9/9/9/16/11pt)은 배포처가 제공하던 HWPX 빈 양식과 **전 항목 일치**함을 실측 확인했으므로, 별도 양식 파일이 없어도 결과가 같다. 여기에 PDF 규칙을 세 군데 패치한다.
+조립은 **kordoc**(npm, MIT — `npx` 실행이라 설치가 없다)의 계획서 프리셋으로 한다.
+**명령 전문과 원고 전처리는 `hwpx-writing` 스킬 §3에 있다.** 여기서는 서식 패치만 다룬다.
 
-```python
-# build_hwpx 산출물의 Contents/header.xml 에 적용
-# ① 장 제목 charPr5 색: #2E74B5(Word Heading1 파랑) → 검정
-h = h.replace('id="5" height="1600" textColor="#2E74B5"',
-              'id="5" height="1600" textColor="#000000"')
-# ② 절 제목용 charPr 7 신설 (13pt 굵게) — 본문(11pt)과 장제목(16pt) 사이 크기가 없다
-c6 = re.search(r'<hh:charPr id="6".*?</hh:charPr>', h, re.S).group(0)
-c7 = c6.replace('id="6"','id="7"').replace('height="1100"','height="1300"') \
-       .replace('<hh:underline','<hh:bold/><hh:underline')
-h  = h.replace(c6, c6+c7, 1)
-h  = re.sub(r'<hh:charProperties itemCnt="(\d+)">',
-            lambda m: f'<hh:charProperties itemCnt="{int(m.group(1))+1}">', h, count=1)
-# ③ 본문 글꼴: PDF 안내문의 "돋움 11pt" 를 문자 그대로 (템플릿 정의는 함초롬돋움)
-h = h.replace('face="함초롬돋움"', 'face="돋움"')
+```bash
+npx -y kordoc@^4 generate 30_proposal.md -o 30_raw.hwpx \
+  --preset 계획서 --font gothic --pt 11 --line-spacing 160 --paper A4 \
+  --fonts "body=돋움,heading=돋움,table=돋움" --image-dir 20_figures
 ```
 
-스타일맵은 동봉 `default_form_style.json` 을 쓴다(본문 charPr6 / 표 charPr2 / 장제목 charPr5 / 절제목 charPr7).
-`xml_writer.py` 출력에는 **XML 선언이 없고** `build_hwpx.py` 는 **자체 기본 여백**을 쓰므로 둘 다 보정한다.
+프리셋 기본값은 **양식값과 다르다**(실측: 여백 좌우 5669=20mm, 글꼴 5종 혼용). 산출물에 다음을 패치한다.
+
+```python
+# ① 여백을 양식값으로 고정 — Contents/section*.xml
+s = re.sub(r'<hp:margin[^>]*/>',
+           '<hp:margin header="4252" footer="4252" gutter="0" '
+           'left="8504" right="8504" top="5668" bottom="4252"/>', s)
+# ② 글꼴을 "돋움"으로 통일 — Contents/header.xml
+for face in ['함초롬바탕','함초롬돋움','한양신명조','한양중고딕','HY견고딕']:
+    h = h.replace(f'face="{face}"', 'face="돋움"')
+```
+
+⚠️ zip 재작성 시 `mimetype` 은 **ZIP_STORED** 로 보존한다(안 하면 열리지 않는다).
+목표 서식값은 동봉 `default_form_style.json`(본문 11pt / 표 9pt / 장제목 16pt 검정 / 절제목 13pt 굵게).
 
 ### ⚠️ 함정 4개 (전부 실측)
 
@@ -122,7 +125,7 @@ PDF **2~3쪽**에 실물이 있고 `default_proposal_form.md` 에 전사돼 있�
 **[표 B] 추진 일정(간트)** (3-3) — 열은 `추진 내용` + **월 1~12 = 13열**, **1차년도만 기입**한다.
 - 첫 행 예시가 `계획 수립·자료조사`에 1·2월 `■` 표기다.
 - ⚠️ **분기(4Q) 단위로 4개 연차를 한 표에 넣는 것은 양식 위반**이다. 2~4차년도는 표가 아니라 서술로 덧붙인다.
-- ⚠️ 채움 문자로 `■`(U+25A0)를 쓰면 **`xml_writer.py` 가 표 셀에서 무조건 제거**한다 → **`◼`(U+25FC)** 를 쓸 것.
+- 채움 문자 `■`(U+25A0)는 kordoc 조립에서 표 셀·본문 모두 **보존**됨을 실측 확인했다(2026-08-13). 양식 원본대로 쓰면 된다.
 
 ## 6. 작성·검수 체크리스트
 
