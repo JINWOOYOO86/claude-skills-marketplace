@@ -61,7 +61,7 @@ Phase 4  평가위원단 6인 병렬채점 → 위원장 종합 → REVISE면 �
 ## Phase 3: 작성
 1. `figure-designer` 실행(조사 결과 기반) → `20_figures/`.
 2. `hwpx-writer` 실행 → `30_proposal.hwpx`/`30_proposal.md` + `30_proposal_manifest.md`.
-   - HWPX 도구는 `hwpx-writer`가 `ToolSearch`로 탐색; 없으면 Markdown 폴백.
+   - HWPX 조립은 `hwpx-writer`가 **kordoc**(`npx`, 설치 불필요)으로 처리한다. Node.js 18+ 프리플라이트가 실패하면 **조용히 md 폴백하지 말고 중단·보고**.
 
 ## Phase 4: 검수·고도화 (평가위원단 95점 게이트 루프)
 `proposal-evaluation-panel` 스킬에 위임한다. 6인 위원단(위원장·기술성·실현가능성·사업화·근거정합성·형식규정)이

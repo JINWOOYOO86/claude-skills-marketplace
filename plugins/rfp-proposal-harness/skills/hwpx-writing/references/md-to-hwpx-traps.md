@@ -28,22 +28,26 @@
 | **부등호 `>` `<`** | 태그로 오인 | **전각 `＞ ＜`** 사용 |
 | **표 셀의 `\|`** | 표 구조를 깨뜨림 (MAPE 절댓값 기호에서 발생) | 「절댓값」으로 풀어쓰기 |
 | **이미지 alt의 대괄호** | `IMAGE_MD_RE` 정규식이 깨짐 | 캡션은 **이미지 다음 줄에 별도 문단**으로 |
-| **`■`** | **표 셀에서만 소리 없이 사라진다** (`xml_writer.py`가 무조건 제거). 간트차트가 빈 표로 인쇄 | **`◼`(U+25FC)** 사용. `LEVEL_MARKERS = ["■","□","●","○","▪","▫","∙","∘"]` 전부 회피 |
+| **`■` 등 도형 문자** | 빌더에 따라 **표 셀에서만 소리 없이 사라진다**(간트차트가 빈 표로 인쇄). 종전 빌더에서 실제로 발생 | **kordoc은 `■ □ ● ○` 를 표 셀·본문 모두 보존**함을 실측 확인(2026-08-13). 빌더를 바꾸면 이 표본 문서로 **재확인**할 것 |
 | **`⚠️`(U+26A0+FE0F)** | 두부(豆腐) 인쇄 위험 | 텍스트 `[유의]`로 치환 |
 
 ---
 
-## 3. 빌드 파이프라인 함정
+## 3. 빌드 파이프라인 함정 (조립 도구 = kordoc)
 
-| 함정 | 대응 |
-|---|---|
-| **`analyze_template.py`의 `confidence: estimated` 스타일맵** | 전 항목이 charPr 0으로 뭉개져 본문이 10pt 함초롬바탕으로 나간다(양식 위반). `font_sizes` 맵을 보고 수동 교정한 `style.json`을 쓸 것 |
-| **`build_hwpx.py`의 자체 기본 여백(20mm)** | 양식값으로 치환 필수. 예: 좌우 30mm = `8504` |
-| **`section0.xml`의 XML 선언 누락** | 8개 파트 중 **이것만** 선언이 없었다. 빌드 후 `<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>` 삽입. J-8로 검출 |
-| **zip 재작성 시 `mimetype` 압축** | `mimetype`은 **ZIP_STORED**여야 한다. 재작성할 때 `ZipInfo.compress_type`을 원본에서 보존할 것 (안 하면 validate INVALID) |
-| **`page_guard.py`** | 빈 양식→신규 생성 시 **구조상 항상 FAIL**. 게이트로 쓰지 말 것 |
-| **`validate.py --strict`** | ZIP-surgery 전용. 신규 생성물은 FAIL하지만 한글 열림엔 무관 |
-| **그림 축소** | `hp:pic` **블록 내부의 `hp:sz`만** 스케일할 것. 전역 치환하면 표까지 줄어든다. `hp:sz`는 `width`와 `height` 사이에 `widthRelTo="ABSOLUTE"`가 끼어 있어 단순 정규식이 0건 매칭 → `curSz`·`sz`·`scaMatrix`·`center`를 함께 처리 |
+| 함정 | 증상 | 대응 |
+|---|---|---|
+| ★ **`--image-dir` 는 basename 으로만 매칭** | `![](20_figures/fig1.png)` 처럼 경로가 붙으면 **에러 없이 `이미지 임베드: 0개`** 로 조용히 끝난다. 그림 없는 계획서가 그대로 산출된다 | 원고의 `](20_figures/` 를 `](` 로 치환하고 `--image-dir 20_figures` 를 준다. **출력의 `이미지 임베드: N개` 를 반드시 눈으로 확인** |
+| ★ **연속된 인용문(`>`)이 한 문단으로 병합** | 인용문 3개(486·620·406자)가 **단일 문단 1,390자**로 합쳐졌다. §1의 결함 계보 #1·#2와 같은 유형이며 **J-5로 검출된다** | 인용문 블록 사이에 **빈 줄** 삽입. CommonMark 표준 동작이므로 kordoc 쪽이 옳다 — 원고를 고칠 것 |
+| **프리셋 서식 ≠ 양식 서식** | 실측: 여백 좌우 `5669`(20mm, 양식은 `8504`=30mm), 글꼴이 한양신명조·HY견고딕·한양중고딕 등 **5종 혼용**. `--fonts` 를 줘도 잔존한다 | 빌드 후 **헤더 패치 필수**(`SKILL.md` §3-3) |
+| **프리셋이 표를 1개 추가** | 계획서 프리셋의 표지 박스가 `hp:tbl` 로 잡혀 **표 개수가 +1** 된다 | `--expect-tables` 선언값에 반영. 형상 diff의 인덱스 밀림도 이것이 원인 |
+| **zip 재작성 시 `mimetype` 압축** | 재작성할 때 압축하면 열리지 않는다 | `mimetype` 은 **ZIP_STORED**. `ZipInfo.compress_type` 을 원본에서 보존할 것 |
+| **XML 선언 누락** | 일부 파트만 선언이 빠지면 규격 위반(J-8) | 빌드 후 `<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>` 확인·삽입 |
+| **그림 축소** | 전역 치환하면 표까지 줄어든다 | `hp:pic` **블록 내부의 `hp:sz` 만** 스케일. `hp:sz` 는 `width` 와 `height` 사이에 `widthRelTo="ABSOLUTE"` 가 끼어 있어 단순 정규식이 0건 매칭 → `curSz`·`sz`·`scaMatrix`·`center` 를 함께 처리 |
+
+> **동등성 실측(2026-08-13)**: 8라운드 PASS 판정본(31p·표 18개)을 kordoc으로 재빌드해 **규율 J 전항 PASS**.
+> 표 18개 행×열 전부 일치, 본문 764문단·최장 880자·표주석 11·참고문헌 20으로 구조 지표 동일,
+> 텍스트 32,443자(대조군 32,423자), 쪽수 **28p**(대조군 31p). 위 함정 2건은 그 과정에서 나왔다.
 
 ---
 
@@ -82,5 +86,8 @@ $hwp.Clear(1); $hwp.Quit()
 - **WSL에서 Windows·클라우드 동기화 폴더를 편집할 때 간헐 EACCES** → python 직접 쓰기로 우회.
 - **HWP(구형 바이너리) 읽기**: WSL에 hwp5txt·LibreOffice가 없으면 `olefile`+`zlib(-15)`+레코드 파싱
   (`tag=h&0x3FF`, `size=(h>>20)&0xFFF`, `HWPTAG_PARA_TEXT=67`, UTF-16LE) 자체 파서가 유일 경로.
-- **선행조건**: `pip install --user --break-system-packages lxml olefile pillow`
-  (WSL python3는 PEP 668이라 `--break-system-packages` 필수, venv는 ensurepip 부재로 실패)
+- **선행조건**
+  - **Node.js 18+** — 조립 도구 kordoc이 `npx` 로 돈다. 최초 1회는 패키지 내려받느라 느리고 **네트워크가 필요**하다.
+  - `pip install --user --break-system-packages olefile` — 구형 `.hwp` 공고문을 읽을 때만.
+    (WSL python3는 PEP 668이라 `--break-system-packages` 필수, venv는 ensurepip 부재로 실패)
+  - 게이트 스크립트 2종(`gate_hwpx.py`·`gate_regress.py`)은 **표준 라이브러리만** 쓴다 — 추가 설치 불필요.

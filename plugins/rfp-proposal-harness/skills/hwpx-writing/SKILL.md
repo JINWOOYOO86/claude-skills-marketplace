@@ -1,6 +1,6 @@
 ---
 name: hwpx-writing
-description: 조사·그림 산출물과 양식 규칙을 종합해 연구계획서를 작성하고 HWPX 문서로 조립하는 스킬. "연구계획서 작성", "HWPX 작성", "계획서 조립", "본문 작성", "제안서 초안"을 요청하면 반드시 사용한다. 기존 HWPX 플러그인/도구가 있으면 그것을 사용한다.
+description: 조사·그림 산출물과 양식 규칙을 종합해 연구계획서를 작성하고 HWPX 문서로 조립하는 스킬. "연구계획서 작성", "HWPX 작성", "계획서 조립", "본문 작성", "제안서 초안"을 요청하면 반드시 사용한다. 조립 도구는 kordoc(npx)이며 별도 플러그인 설치가 필요 없다.
 ---
 
 # HWPX 작성 스킬
@@ -13,11 +13,11 @@ description: 조사·그림 산출물과 양식 규칙을 종합해 연구계획
 `01_template_rules.md`의 목차·서식을 최우선 기준으로 삼는다. **목차 항목을 임의 추가/삭제하지 않는다.**
 둘째 줄 `양식출처:` 를 확인한다 — `기본양식(폴백)` 이면 공고 지정 서식이 없다는 뜻이므로, 분량·필수기재 판단을 사용자에게 올릴 때 이 사실을 함께 알린다.
 
-**스타일 참조**: 공고 첨부 양식 파일이 있으면 그 `Contents/header.xml` 을 `build_hwpx.py --header` 에 넣는다.
-**없으면 `--header` 를 생략해 도구 기본 템플릿으로 만들고**, 기본 양식의 서식 규칙(A4 / 돋움 11pt / 줄간격 160%)을 산출물 헤더에 패치한다 — 절차와 코드는 `template-extraction` 스킬의 `assets/default-form/default_form_rules.md` §3에 있다.
+**스타일 참조**: 공고 첨부 양식 파일이 있으면 `kordoc profile` 로 서식 프로필을 뽑아 `generate --profile` 에 넣는다(표 테두리·음영·열폭·셀 글꼴 재현).
+**없으면 프리셋으로 만들고**, 기본 양식의 서식 규칙(A4 / 돋움 11pt / 줄간격 160%)을 산출물 헤더에 패치한다 — 절차와 코드는 `template-extraction` 스킬의 `assets/default-form/default_form_rules.md` §3에 있다.
 
-스타일맵은 `assets/default-form/default_form_style.json` 을 쓴다 — 본문 `charPr6`=11pt 돋움 / 표 `charPr2`=9pt / 장제목 `charPr5`=16pt **검정**(템플릿 기본값은 파랑 `#2E74B5` 이므로 교정) / 절제목 `charPr7`=13pt 굵게(신설), 여백 좌우 8504·상 5668·하 4252, 줄간격 160%.
-`analyze_template.py` 의 `confidence: estimated` 결과는 전 항목 charPr 0으로 뭉개지므로 위 값으로 수동 교정하고, `build_hwpx.py` 의 기본 여백(20mm)도 치환해야 한다.
+목표 서식값은 `assets/default-form/default_form_style.json` 이다 — 본문 11pt 돋움 / 표 9pt / 장제목 16pt **검정** / 절제목 13pt 굵게, 여백 좌우 8504·상 5668·하 4252, 줄간격 160%.
+⚠️ **kordoc 프리셋은 이 값을 그대로 주지 않는다**(실측: 여백 좌우 5669=20mm, 글꼴 한양신명조·HY견고딕 등 5종 혼용). **§3의 헤더 패치가 필수**다.
 
 ### 2. 섹션-근거 매핑
 각 목차 항목에 조사 산출물을 매핑해 본문을 작성한다:
@@ -30,10 +30,88 @@ description: 조사·그림 산출물과 양식 규칙을 종합해 연구계획
 - **수치·특허번호를 새로 지어내지 않는다.** 근거 파일의 값과 출처만 사용한다.
 - 미확보 항목은 `[보완 필요: ...]` 플레이스홀더로 남긴다.
 
-### 3. HWPX 조립
-- **HWPX 플러그인/MCP 도구가 있으면** 그것으로 서식(폰트·여백·목차)을 적용해 `_workspace/30_proposal.hwpx` 생성.
-  - 사용 가능한 도구를 먼저 `ToolSearch`로 탐색(예: hwp/hwpx 관련). 없으면 아래 폴백.
-- **도구가 없으면** 서식 규칙을 반영한 Markdown 원고 `_workspace/30_proposal.md`를 만들고 "HWPX 변환 필요"로 표시.
+### 3. HWPX 조립 — kordoc
+
+조립 도구는 **kordoc**(npm, MIT)이다. `npx` 로 실행하므로 **별도 플러그인·설치가 필요 없다.**
+
+#### 3-0. 프리플라이트 (건너뛰지 말 것)
+
+```bash
+node -v                          # v18 이상이어야 한다
+npx -y kordoc@^4 --version       # 최초 1회는 패키지 내려받느라 느리다(네트워크 필요)
+```
+
+⚠️ **실패하면 조용히 Markdown 폴백으로 내려가지 말고 중단하고 사용자에게 알린다.**
+"HWPX를 요청했는데 md만 나오고 이유는 로그 속에 묻히는" 사고가 실제로 있었다.
+Node가 없으면 안내한 뒤, 사용자가 폴백을 선택한 경우에만 `30_proposal.md` + "HWPX 변환 필요" 표시로 마감한다.
+
+#### 3-1. 원고 전처리 (실측 함정 — 이걸 빼면 J-5가 FAIL한다)
+
+```bash
+# ① 이미지 참조는 파일명만 남긴다 — kordoc --image-dir 은 basename 으로만 매칭한다
+sed -i 's#](20_figures/#](#g' 30_proposal.md
+# ② 연속된 인용문(>)은 한 문단으로 병합된다 → 사이에 빈 줄을 넣는다
+python3 - <<'PY'
+lines = open('30_proposal.md', encoding='utf-8').read().split('\n')
+out = []
+for l in lines:
+    if l.startswith('>') and out and out[-1].startswith('>'):
+        out.append('')
+    out.append(l)
+open('30_proposal.md', 'w', encoding='utf-8').write('\n'.join(out))
+PY
+```
+
+#### 3-2. 생성
+
+```bash
+npx -y kordoc@^4 generate 30_proposal.md -o 30_raw.hwpx \
+  --preset 계획서 --font gothic --pt 11 --line-spacing 160 --paper A4 \
+  --fonts "body=돋움,heading=돋움,table=돋움" --image-dir 20_figures
+```
+출력의 **`이미지 임베드: N개`를 반드시 확인한다.** 0개면 경로 매칭이 실패한 것이며 **에러가 나지 않는다.**
+
+#### 3-3. 헤더 패치 (양식값 강제 — 프리셋 기본값은 양식과 다르다)
+
+```bash
+python3 - <<'PY'
+import zipfile, re
+src, dst = '30_raw.hwpx', '30_proposal.hwpx'
+zin = zipfile.ZipFile(src); zout = zipfile.ZipFile(dst, 'w')
+for it in zin.infolist():
+    d = zin.read(it.filename)
+    if it.filename.startswith('Contents/section'):
+        s = d.decode('utf-8')
+        n = len(re.findall(r'<hp:margin[^>]*/>', s))
+        assert n >= 1, '여백 태그 미검출 — 치환 실패'
+        s = re.sub(r'<hp:margin[^>]*/>',
+                   '<hp:margin header="4252" footer="4252" gutter="0" '
+                   'left="8504" right="8504" top="5668" bottom="4252"/>', s)
+        print(f'여백 치환 {n}건')
+        d = s.encode('utf-8')
+    if it.filename.endswith('header.xml'):
+        h = d.decode('utf-8'); cnt = 0
+        for face in ['함초롬바탕', '함초롬돋움', '한양신명조', '한양중고딕', 'HY견고딕']:
+            cnt += h.count(f'face="{face}"'); h = h.replace(f'face="{face}"', 'face="돋움"')
+        print(f'글꼴 통일 {cnt}건 → 돋움')
+        d = h.encode('utf-8')
+    zi = zipfile.ZipInfo(it.filename, date_time=it.date_time)
+    zi.compress_type = zipfile.ZIP_STORED if it.filename == 'mimetype' else zipfile.ZIP_DEFLATED
+    zout.writestr(zi, d)
+zout.close()
+PY
+```
+⚠️ `mimetype` 은 **ZIP_STORED** 여야 한다. 이걸 놓치면 열리지 않는다.
+
+#### 3-4. 검증
+
+```bash
+npx -y kordoc@^4 validate 30_proposal.hwpx      # 구조 검증
+npx -y kordoc@^4 render   30_proposal.hwpx -o preview.svg   # 조판 눈검사(선택)
+```
+쪽수 실측은 한컴 COM(`references/md-to-hwpx-traps.md` §5). 한컴이 없으면 **「쪽수 미측정」으로 명시**하고 통과를 발급하지 않는다.
+
+> **실측 근거**: 8라운드 PASS 판정본(31p·표 18개)을 이 경로로 재빌드해 규율 J **전항 PASS**, 표 18개 행×열 전부 일치, 본문 764문단·최장 880자·표주석 11·참고문헌 20으로 **구조 지표 동일**, 쪽수는 오히려 **28p**(3p 절감)였다.
 
 ### 4. 산출 매니페스트
 `_workspace/30_proposal_manifest.md`에 STATUS, 채워진 섹션 / `[보완 필요]` 섹션 목록을 기록.
