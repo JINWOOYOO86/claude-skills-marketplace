@@ -173,14 +173,96 @@ def outline(text):
     return {re.sub(r"\s+", "", h) for h in re.findall(r"^#{2,3}\s+(.+?)\s*$", text, re.M)}
 
 
+def measure_pair(dir_a, dir_b, proposal_prefix):
+    """두 워크스페이스의 층위별 일치도를 dict 로 돌려준다(다자 비교용)."""
+    A, B = read_all(dir_a), read_all(dir_b)
+
+    def is_body(k):
+        return k.startswith(proposal_prefix) and not re.search(r"manifest|prev|_v\d", k)
+
+    pa = "\n".join(v for k, v in A.items() if is_body(k))
+    pb = "\n".join(v for k, v in B.items() if is_body(k))
+    oa, ob = outline(pa), outline(pb)
+    la, lb = {}, {}
+    for v in A.values():
+        la.update(ledger(v))
+    for v in B.values():
+        lb.update(ledger(v))
+    pairs = match_keys(la, lb)
+    same = [(ka, kb) for ka, kb, _ in pairs if val_equal(la[ka], lb[kb])]
+    ea = set().union(*(entities(v) for v in A.values())) if A else set()
+    eb = set().union(*(entities(v) for v in B.values())) if B else set()
+    return {
+        "L2": jaccard(oa, ob) if (oa or ob) else None,
+        "L3a": (2 * len(pairs) / (len(la) + len(lb))) if (la or lb) else None,
+        "L3b": (len(same) / len(pairs)) if pairs else None,
+        "L4": jaccard(ea, eb),
+        "L5": cosine3(pa, pb) if (pa and pb) else cosine3("\n".join(A.values()), "\n".join(B.values())),
+        "conflicts": [(f"{ka} ↔ {kb}", la[ka], lb[kb]) for ka, kb, _ in pairs
+                      if not val_equal(la[ka], lb[kb])],
+    }
+
+
+def multi(dirs, proposal_prefix, out=None, jsonp=None):
+    """3회 이상 실행의 **쌍별** 일치도와 평균 — 재현성은 두 번이 아니라 여러 번으로 말해야 한다."""
+    import itertools
+    names = [os.path.basename(d.rstrip("/")) for d in dirs]
+    rows, acc = [], defaultdict(list)
+    for (i, a), (j, b) in itertools.combinations(list(enumerate(dirs)), 2):
+        m = measure_pair(a, b, proposal_prefix)
+        rows.append((f"{names[i]} ↔ {names[j]}", m))
+        for k in ("L2", "L3a", "L3b", "L4", "L5"):
+            if m[k] is not None:
+                acc[k].append(m[k])
+    lines = ["# 재현성 다자 측정 (쌍별)", "",
+             "| 쌍 | L2 구조 | L3-a 지표 | L3-b 값 | L4 근거 | **L5 서술** |",
+             "|---|---:|---:|---:|---:|---:|"]
+    for name, m in rows:
+        f = lambda v: "—" if v is None else f"{v:.2f}"
+        lines.append(f"| {name} | {f(m['L2'])} | {f(m['L3a'])} | {f(m['L3b'])} | {f(m['L4'])} | **{f(m['L5'])}** |")
+    lines.append("")
+    means = {k: (sum(v) / len(v) if v else None) for k, v in acc.items()}
+    fm = lambda k: "—" if means.get(k) is None else f"{means[k]:.2f}"
+    lines += [f"**평균** — 구조 {fm('L2')} · 지표 {fm('L3a')} · 값 {fm('L3b')} · 근거 {fm('L4')} · **서술 {fm('L5')}**", ""]
+    worst = min((m["L5"] for _, m in rows if m["L5"] is not None), default=None)
+    if worst is not None:
+        lines += [f"**최저 쌍 서술 유사도 = {worst:.2f}**  (재현성은 최악 쌍으로 말한다)", ""]
+    allc = [c for _, m in rows for c in m["conflicts"]]
+    if allc:
+        seen, uniq = set(), []
+        for k, x, y in allc:
+            if k not in seen:
+                seen.add(k)
+                uniq.append((k, x, y))
+        lines += ["## 값이 갈린 지표", "", "| 지표 | 값 A | 값 B |", "|---|---|---|"]
+        lines += [f"| {k} | {x} | {y} |" for k, x, y in uniq[:30]]
+    report = "\n".join(lines)
+    print(report)
+    if out:
+        open(out, "w", encoding="utf-8").write(report)
+        print(f"\n보고서: {out}")
+    if jsonp:
+        json.dump({"pairs": [{"pair": n, **{k: v for k, v in m.items() if k != "conflicts"}} for n, m in rows],
+                   "means": means, "worst_L5": worst},
+                  open(jsonp, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--a", required=True, help="실행 A 워크스페이스")
-    ap.add_argument("--b", required=True, help="실행 B 워크스페이스")
+    ap.add_argument("--a", help="실행 A 워크스페이스")
+    ap.add_argument("--b", help="실행 B 워크스페이스")
+    ap.add_argument("--runs", nargs="+", help="3회 이상 실행 — 쌍별 비교와 평균을 낸다")
     ap.add_argument("--proposal", default="30_proposal", help="계획서 파일명 접두어")
     ap.add_argument("--out", help="보고서 md 경로")
     ap.add_argument("--json", help="결과 JSON 경로")
     a = ap.parse_args()
+
+    if a.runs:
+        return multi(a.runs, a.proposal, a.out, a.json)
+    if not (a.a and a.b):
+        print("--a/--b 또는 --runs 가 필요하다")
+        return 2
 
     A, B = read_all(a.a), read_all(a.b)
     L = []
