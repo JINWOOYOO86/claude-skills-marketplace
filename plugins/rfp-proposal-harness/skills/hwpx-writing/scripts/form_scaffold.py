@@ -63,11 +63,19 @@ def build(spec):
             out.append("")
         bp = node.get("blueprint") or []
         if bp:
-            # ★ 골격 = 1단계(□) 리드 항목을 이름·순서까지 고정한다.
-            #   실측: 골격 없이 쓰면 같은 과제·같은 양식이어도 서술 유사도가 0.62 에 머문다.
-            for lead in bp:
-                out.append(f"- **{lead}** — (한 줄 결론)")
-                out.append("  - (근거·수치·출처 — 확정 수치 대장에서만 인용)")
+            # ★ 골격 = 1단계(□) 리드 + 2단계(ㅇ) 슬롯까지 고정한다.
+            #   실측: 리드만 고정하면 리드 38개는 100% 일치해도 ㅇ 문장이 갈려 유사도가 0.56 에 머문다.
+            #   슬롯의 key 는 확정 수치 대장에서 인용할 항목이다 — 같은 값이면 같은 문장이 나온다.
+            for item in bp:
+                if isinstance(item, str):
+                    out.append(f"- **{item}** — (한 줄 결론)")
+                    out.append("  - (근거·수치·출처 — 확정 수치 대장에서만 인용)")
+                    continue
+                out.append(f"- **{item['lead']}** — (한 줄 결론)")
+                for sl in item.get("slots", []):
+                    key = sl.get("key")
+                    tail = f"(대장 `{key}` 값 인용)" if key else "(근거·수치·출처)"
+                    out.append(f"  - {sl['text']} — {tail}")
             out.append("")
         elif node["level"] == 3 and (spec.get("writing_style") or {}).get("mode") == "개조식":
             out.append("- **(논점을 한 줄로)** — (핵심 근거 요약)")
