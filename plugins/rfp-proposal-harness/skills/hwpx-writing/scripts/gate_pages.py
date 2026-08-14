@@ -76,7 +76,18 @@ for t in titles:
 last = d[-1]
 blocks = [b for b in last.get_text('blocks') if b[4].strip()]
 end_frac = round(max(b[3] for b in blocks) / last.rect.height, 3) if blocks else 1.0
-json.dump({'total': d.page_count, 'end_frac': end_frac, 'chapters': res},
+# ★ 실제 줄간격(pt) — 한글이 문서의 줄간격을 따랐는지 판정하는 근거
+gaps = []
+for page in d:
+    ls = [l for bl in page.get_text('dict')['blocks'] if bl.get('lines') for l in bl['lines']]
+    ls.sort(key=lambda l: l['bbox'][1])
+    for i in range(len(ls) - 1):
+        g = ls[i + 1]['bbox'][1] - ls[i]['bbox'][1]
+        if 5 < g < 60:
+            gaps.append(g)
+gaps.sort()
+line_gap = round(gaps[len(gaps) // 2], 2) if gaps else None
+json.dump({'total': d.page_count, 'end_frac': end_frac, 'line_gap': line_gap, 'chapters': res},
           open(out, 'w', encoding='utf-8'), ensure_ascii=False)
 """
 
@@ -141,6 +152,7 @@ def measure(hwpx, chapters, winpython):
     data = json.load(open(outp, encoding="utf-8"))
     starts = {c["id"]: (c["start"], c.get("frac", 0.0)) for c in data["chapters"]}
     starts["_end"] = (data["total"], data.get("end_frac", 1.0))
+    starts["_gap"] = (data.get("line_gap"), 0.0)
     if data["total"] != total:
         # PDF 가 최종 인쇄물이므로 PDF 쪽수를 정본으로 삼는다
         return data["total"], starts, (warn + " / " if warn else "") + \
@@ -148,7 +160,7 @@ def measure(hwpx, chapters, winpython):
     return total, starts, warn
 
 
-def measure_worst(hwpx, chapters, winpython, repeat):
+def measure_worst(hwpx, chapters, winpython, repeat, spec=None):
     """★ 같은 파일이 9p / 10p 로 갈리는 조판 편차가 있다 — **최악(최대) 조판을 채택**한다.
 
     원인(2026-08-14 PDF 실측): 한글이 줄 높이를 **문서의 160%(11pt→17.5pt)** 로 잡을 때와
@@ -157,19 +169,35 @@ def measure_worst(hwpx, chapters, winpython, repeat):
     않는 것으로, **읽는 사람의 한글에서 느슨하게 조판될 수 있다**는 뜻이다.
     → 게이트는 **가장 두껍게 조판된 결과**로 판정한다. 그래야 남의 PC에서 규정을 넘지 않는다.
     """
+    style = (spec or {}).get("style", {})
+    want_gap = None
+    if style.get("body_pt") and style.get("line_spacing"):
+        want_gap = float(style["body_pt"]) * float(style["line_spacing"]) / 100.0
+
     runs = []
     for _ in range(max(1, repeat)):
         t, st, nt = measure(hwpx, chapters, winpython)
         if t is None:
             return t, st, nt
         runs.append((t, st, nt))
+        gap = st.get("_gap", (None,))[0] if st else None
+        # 규격대로(줄간격 오차 ±15%) 조판됐으면 더 볼 것 없다
+        if want_gap and gap and abs(gap - want_gap) <= want_gap * 0.15:
+            note = f"줄간격 실측 {gap:.1f}pt (규격 {want_gap:.1f}pt) — 규격 조판 회차 채택. "
+            return t, st, note + (nt or "")
+
+    # 규격 조판을 한 번도 못 얻었다 → 최악값으로 판정하고 사유를 남긴다
     best = max(runs, key=lambda r: r[0])
+    gaps = [r[1].get("_gap", (None,))[0] for r in runs if r[1]]
     totals = sorted({r[0] for r in runs})
-    spread = ""
-    if len(totals) > 1:
-        spread = (f"조판 편차 {totals[0]}~{totals[-1]}p ({len(runs)}회 측정) — "
-                  "한글이 줄 높이를 글꼴 메트릭으로 잡는 경우가 있어 **최대값을 채택**했다. ")
-    return best[0], best[1], spread + (best[2] or "")
+    note = ""
+    if want_gap:
+        note = (f"⚠️ 규격 줄간격({want_gap:.1f}pt)으로 조판된 회차 없음 — 실측 {gaps} pt. "
+                "한글의 「글꼴에 어울리는 줄 높이」 설정이 문서 지정을 덮어쓴 상태이며, "
+                f"최악값 {best[0]}p 로 판정했다. ")
+    elif len(totals) > 1:
+        note = f"조판 편차 {totals[0]}~{totals[-1]}p — 최대값 채택. "
+    return best[0], best[1], note + (best[2] or "")
 
 
 def estimate(md_text, spec):
@@ -225,7 +253,7 @@ def main():
     chapters = [{"id": n["id"], "title": n["title"]} for n in spec["outline"] if n["level"] == 2]
     md_text = open(a.md, encoding="utf-8").read() if a.md and os.path.exists(a.md) else ""
 
-    total, starts, note = measure_worst(a.hwpx, chapters, a.winpython, a.repeat)
+    total, starts, note = measure_worst(a.hwpx, chapters, a.winpython, a.repeat, spec)
     fails, warns, rows = [], [], []
 
     if total is None:

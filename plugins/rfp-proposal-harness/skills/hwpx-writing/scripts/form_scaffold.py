@@ -26,6 +26,14 @@ def build(spec):
     out.append("[배분] " + " / ".join(f"{k}장 {v}p" for k, v in ch_budget.items()))
     out.append(f"[상한] 산문 {lim.get('prose_chars','?')}자 · 표 {lim.get('tables','?')}개"
                f"(열 {lim.get('table_cols_max','?')} 이하) · 그림 {lim.get('figures','?')}장")
+    ws = spec.get("writing_style") or {}
+    if ws.get("mode"):
+        out.append(f"[서술] **{ws['mode']}** — 마크다운 중첩 목록으로 쓰면 조립 도구가 "
+                   + " / ".join(f"{v}({k}단계)" for k, v in (ws.get("markers") or {}).items())
+                   + " 로 조판한다. 말머리를 직접 타이핑하지 않는다.")
+        out.append(f"       각 항목은 **명사형 종결**({'/'.join((ws.get('preferred_endings') or [])[:6])})로 끝내고, "
+                   f"{'/'.join((ws.get('forbidden_endings') or [])[:4])} 는 쓰지 않는다. "
+                   f"한 항목 {ws.get('max_item_chars', 160)}자 이내, 깊이 {ws.get('max_depth', 2)}단계까지.")
     out.append("[규율] 제목은 한 글자도 바꾸지 않는다. 절을 새로 만들지 않는다.")
     out.append("       이 주석은 조립 전에 form_strip.py 가 전부 지운다 — 지우지 않고 빌드하면 게이트가 FAIL 한다.")
     out.append("-->")
@@ -52,6 +60,10 @@ def build(spec):
             if chap in ch_budget:
                 out.append(f"[분량] {chap}장 배분 {ch_budget[chap]}p 안에서 소화한다")
             out.append("-->")
+            out.append("")
+        if node["level"] == 3 and (spec.get("writing_style") or {}).get("mode") == "개조식":
+            out.append("- **(논점을 한 줄로)** — (핵심 근거 요약)")
+            out.append("  - (근거·수치·출처)")
             out.append("")
         out.append("")
     return "\n".join(out).rstrip() + "\n"

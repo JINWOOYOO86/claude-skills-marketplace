@@ -207,6 +207,50 @@ def sp_fig_or_table(doc, sid):
     return (n_t + n_p) > 0, f"표 {n_t}개 · 그림 {n_p}장"
 
 
+def style_check(doc, spec):
+    """F-8 개조식 준수 — 본문 문단이 「말머리 + 명사형 종결」인지 본다.
+
+    측정 매체는 **hwpx 본문 문단**(표 셀·제목·캡션 제외)이다. md 로 재면 목록 마커가
+    조판 단계에서 어떻게 바뀌는지 못 보고, 표 안의 서술체를 본문으로 착각한다.
+
+    ★ 함정: 「~다.」로 끝나면 서술체지만, **「~한다」로 끝나는 표제어**(예: 「…를 우선 탐색한다」)와
+      숫자·단위로 끝나는 항목(「…88% 상승」)을 구분해야 한다. 종결 판정은 문단의 **마지막 어절**로만 한다.
+    """
+    ws = spec.get("writing_style")
+    if not ws:
+        return None
+    markers = tuple(ws.get("markers", {}).values()) + ("○", "-", "·")
+    exempt = tuple(ws.get("exempt_paragraph_prefixes", []))
+    bad_end = tuple(ws.get("forbidden_endings", []))
+    maxlen = int(ws.get("max_item_chars", 160))
+
+    body, bullets, narrative, longs = [], [], [], []
+    for sid in doc.order:
+        for txt in doc.sections.get(sid, {}).get("text", []):
+            t = (txt or "").strip()
+            if len(t) < 12 or t.startswith(exempt):
+                continue
+            if norm(t) in doc.title_of:          # 장·절 제목
+                continue
+            body.append(t)
+            if t.startswith(markers):
+                bullets.append(t)
+                if len(t) > maxlen:
+                    longs.append(t[:28] + "…")
+            last = re.sub(r"[)\]\s.]+$", "", t.split()[-1]) if t.split() else ""
+            if any(last.endswith(e) for e in bad_end):
+                narrative.append(t[:28] + "…")
+    if not body:
+        return None
+    return {
+        "n_body": len(body),
+        "bullet_ratio": len(bullets) / len(body),
+        "narrative": narrative,
+        "narrative_ratio": len(narrative) / len(body),
+        "longs": longs,
+    }
+
+
 # ---------------- 본체 ----------------
 
 def main():
@@ -341,6 +385,21 @@ def main():
         n = len(prose)
         check("F-7 산문 자수 상한", n <= lim.get("prose_chars", 15000),
               f"{n:,}자 (상한 {lim.get('prose_chars',15000):,}자) — 추정치, 쪽수 실측은 gate_pages.py", "md")
+
+    # F-8 개조식 준수 -----------------------------------------------------------
+    ws = spec.get("writing_style") or {}
+    st = style_check(doc, spec)
+    if st:
+        rmin = float(ws.get("bullet_ratio_min", 0.8))
+        nmax = float(ws.get("narrative_ratio_max", 0.10))
+        check(f"F-8a 개조식 말머리 비율(≥{rmin:.0%})", st["bullet_ratio"] >= rmin,
+              f"본문 {st['n_body']}문단 중 말머리 {st['bullet_ratio']:.0%}", "hwpx")
+        check(f"F-8b 서술형 종결(≤{nmax:.0%})", st["narrative_ratio"] <= nmax,
+              f"{len(st['narrative'])}건 {st['narrative'][:3]}" if st["narrative"] else "0건",
+              "hwpx")
+        check(f"F-8c 항목 길이(≤{ws.get('max_item_chars',160)}자)", not st["longs"],
+              f"초과 {len(st['longs'])}건 {st['longs'][:3]}" if st["longs"] else "전 항목 이내",
+              "hwpx", "warn")
 
     ok = not fails
     print(f"\n{'='*60}\n{'PASS' if ok else 'FAIL'} — 실패 {len(fails)}건"

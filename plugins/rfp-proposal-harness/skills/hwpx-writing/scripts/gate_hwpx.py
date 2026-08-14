@@ -36,6 +36,7 @@ FORBIDDEN = {
     "이형 공백 U+FEFF": "﻿",
     "미치환 플레이스홀더": "[보완 필요",
     "TODO 잔존": "TODO",
+    "미변환 마크다운 강조": "**",
 }
 # 이중 이스케이프 — 3패턴 전부 검사할 것(1패턴만 보면 놓친다)
 ESCAPE_PATTERNS = [r"&amp;amp;", r"&amp;lt;", r"&amp;gt;"]
