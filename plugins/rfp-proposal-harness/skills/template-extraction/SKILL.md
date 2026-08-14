@@ -26,7 +26,9 @@ description: 연구계획서 양식(HWPX/PDF)에서 작성 목차·폰트·여�
 공고에 별도 서식 지시(분량·글꼴 등)가 있으면 그 항목만 덮어쓴다.
 
 ```bash
-cp "$CLAUDE_PLUGIN_ROOT/skills/template-extraction/assets/default-form/default_form_rules.md" _workspace/01_template_rules.md
+D="$CLAUDE_PLUGIN_ROOT/skills/template-extraction/assets/default-form"
+cp "$D/default_form_rules.md" _workspace/01_template_rules.md   # 사람이 읽는 규칙
+cp "$D/default_form_spec.json" _workspace/01_template_spec.json  # ★ 게이트가 읽는 기계 명세
 ```
 
 기본 양식의 성격·교체 방법은 `assets/default-form/README.md` 참조. 특정 부처 공고에 실제 제출할 때는 **그 공고의 첨부 서식이 항상 우선**한다.
@@ -45,11 +47,29 @@ cp "$CLAUDE_PLUGIN_ROOT/skills/template-extraction/assets/default-form/default_f
 3. **서식 규칙 표**: 글꼴 · 크기 · 줄간격 · 여백 · 페이지/분량 제한 · 표·그림 규칙
 4. **주의사항 체크리스트**: 붉은 글씨 안내, 작성 금지사항 등
 
-### 4. 불명확 항목 처리
+### 4. ★ 기계판독 명세(JSON) 산출 — 게이트의 입력이다
+
+규칙표(md)만 만들면 **지켰는지 아무도 검사하지 못한다.** 같은 내용을 `01_template_spec.json` 으로도 낸다.
+스키마는 `assets/default-form/default_form_spec.json` 을 그대로 따르고, 항목을 빼거나 이름을 바꾸지 않는다.
+
+| 키 | 내용 | 쓰는 곳 |
+|---|---|---|
+| `page_budget` | 총 분량·상한·**장별 배분**·허용오차 | `gate_pages.py` |
+| `style` | 용지·글꼴·pt·줄간격 | 헤더 패치·`gate_hwpx.py` J-16 |
+| `limits` | 산문 자수·표 개수·표 열수 상한(+양식 지정 절 예외)·그림 수 | `gate_form.py` F-6·F-7 |
+| `outline[]` | 장·절 **제목 원문**, 그 절의 **`guide`(양식 설명문 원문)**, `probes`(커버리지 정규식), `special`(지정 서식) | 스캐폴드·`gate_form.py` F-1·F-3·F-4 |
+| `residue_exempt` | 설명문이지만 **본문에 그대로 써야 하는 표제**(「가. 1차년도」·「[표 A]」 등) | `form_strip.py`·F-5 |
+| `guide_residue_patterns` | 산출물에 남으면 안 되는 안내 문구 | F-5 |
+
+**`guide` 는 양식 원문을 그대로 옮긴다** — 이것이 스캐폴드의 체크리스트가 되고, 동시에 「지워야 할 문장」의 목록이 된다.
+양식이 「권장」이라고 쓴 항목은 `special` 에 `{"key":…,"severity":"warn"}` 으로 넣어 **통과를 막지 않게** 한다.
+
+### 5. 불명확 항목 처리
 규칙이 명시되지 않은 항목은 **추정하지 말고 "명시 없음"**으로 남긴다. 뒤에서 사람이 판단.
 
 ## 출력
-`_workspace/01_template_rules.md`. 첫 줄: `## STATUS: OK | PARTIAL`, 둘째 줄: `양식출처: <파일명> | 기본양식(폴백)`
+- `_workspace/01_template_rules.md` — 첫 줄 `## STATUS: OK | PARTIAL`, 둘째 줄 `양식출처: <파일명> | 기본양식(폴백)`
+- `_workspace/01_template_spec.json` — 기계판독 명세(§4). **이것이 없으면 양식·분량 게이트를 돌릴 수 없다.**
 
 ## 동봉 자산
 
@@ -59,6 +79,7 @@ cp "$CLAUDE_PLUGIN_ROOT/skills/template-extraction/assets/default-form/default_f
 | `assets/default-form/default_proposal_form.md` | 위 PDF의 **전사본**. 목차 골격을 복사해 작성 시작점으로 쓴다 |
 | `assets/default-form/default_form_style.json` | HWPX 조립용 스타일맵 |
 | `assets/default-form/default_form_rules.md` | 사전 추출 **작성 가이드라인 겸 규칙표**(폴백 시 그대로 복사) — 분량 원단위·체크리스트 포함 |
+| `assets/default-form/default_form_spec.json` | **기계판독 명세**(폴백 시 `01_template_spec.json` 으로 복사) — 스캐폴드·양식 게이트·분량 게이트가 모두 이 파일을 읽는다 |
 | `assets/default-form/README.md` | 양식의 성격·교체 절차·스크럽 규율 |
 
 **기본 양식으로 쓸 때 자주 어기는 3가지**(전부 실측 적발): ⑴ **[표 B] 간트는 1차년도 월 단위 12칸**이다 — 분기×4개년 표는 위반 ⑵ KPI 표에 **평가환경** 열이 빠진다(양식은 단위·기준값·목표치·평가방법·평가환경 5요소를 요구) ⑶ 2-2는 **[표 A] 형식(구분/연차/목표)**이어야 하며 서술로 대체하지 않는다.
