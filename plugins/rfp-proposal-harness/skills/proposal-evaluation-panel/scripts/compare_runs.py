@@ -62,7 +62,7 @@ def ledger(text):
     out = {}
     grab = False
     for line in text.split("\n"):
-        if re.match(r"^#{1,4}\s*.*확정\s*수치\s*대장", line):
+        if re.match(r"^#{1,4}\s*.*확정\s*\S*\s*대장", line):   # 「수치/근거」 등 표기 흔들림 흡수
             grab = True
             continue
         if grab and re.match(r"^#{1,4}\s", line):
@@ -73,10 +73,75 @@ def ledger(text):
                 continue
             key = re.sub(r"\*\*|`", "", cells[0]).strip()
             val = re.sub(r"\*\*|`", "", cells[1]).strip()
-            if key and val and key not in ("지표명", "항목", "규제명", "지표"):
-                m = RE_NUMUNIT.search(val)
-                out[key] = norm_num(m.group(1)) + " " + m.group(2) if m else val[:40]
+            unit = re.sub(r"\*\*|`", "", cells[2]).strip() if len(cells) > 2 else ""
+            if key and val and key not in ("지표명", "항목", "규제명", "지표", "key"):
+                # ★ 값 칸에서 첫 숫자만 뽑으면 「2024년 기준…」의 연도를 값으로 오독한다.
+                #   숫자를 전부 모아 집합으로 두고, 단위 칸을 함께 붙여 비교 단위를 맞춘다.
+                if "미확인" in val:
+                    out[key] = "미확인"
+                    continue
+                body = re.sub(r"\([^)]*\)", "", val)          # 괄호 주석 제거
+                nums = [norm_num(n) for n in re.findall(r"\d[\d,]*(?:\.\d+)?", body)]
+                out[key] = (" ".join(nums) + (" " + unit if unit and unit != "-" else "")).strip() \
+                    if nums else re.sub(r"\s+", " ", body)[:40]
     return out
+
+
+ORGY = re.compile(r"\((?:[^()]*)\)")          # 괄호 안(조사기관·비고)은 지표명에서 뺀다
+KEY_STOP = {"규모", "시장", "값", "수치", "기준", "대역", "추정", "약", "및", "등",
+            "세계", "글로벌", "국내", "한국", "연", "년", "기준값", "목표"}
+
+
+def key_tokens(k):
+    """지표명을 비교용 토큰 집합으로. 「세계 냉매시장 규모(GVR)」와 「세계 냉매시장 규모(대역)」이 같아지도록."""
+    k = ORGY.sub("", k)
+    k = re.sub(r"[^\w가-힣%℃/]+", " ", k)
+    toks = {t for t in k.split() if len(t) > 1 and t not in KEY_STOP}
+    return toks
+
+
+def match_keys(la, lb, thr=0.5):
+    """A·B 지표명을 주제 단위로 짝짓는다(그리디 최대 유사도). 반환: [(ka, kb, 유사도)]"""
+    ta = {k: key_tokens(k) for k in la}
+    tb = {k: key_tokens(k) for k in lb}
+    pairs = []
+    for ka, sa in ta.items():
+        best, score = None, 0.0
+        for kb, sb in tb.items():
+            if not (sa | sb):
+                continue
+            j = len(sa & sb) / len(sa | sb)
+            if j > score:
+                best, score = kb, j
+        if best and score >= thr:
+            pairs.append((ka, best, round(score, 2)))
+    used = set()
+    out = []
+    for ka, kb, sc in sorted(pairs, key=lambda x: -x[2]):
+        if kb in used:
+            continue
+        used.add(kb)
+        out.append((ka, kb, sc))
+    return out
+
+
+def val_equal(x, y):
+    """값 동등성 — 목록은 집합, 숫자는 5% 오차, 그 밖은 문자열 정규화로 비교."""
+    lx = [t.strip() for t in re.split(r"[,·/]", x or "") if t.strip()]
+    ly = [t.strip() for t in re.split(r"[,·/]", y or "") if t.strip()]
+    if len(lx) >= 2 and len(ly) >= 2 and not re.search(r"\d", x or ""):
+        return {t.lower() for t in lx} == {t.lower() for t in ly}   # 나열 순서는 차이가 아니다
+    nx = re.search(r"-?\d[\d,]*(?:\.\d+)?", x or "")
+    ny = re.search(r"-?\d[\d,]*(?:\.\d+)?", y or "")
+    if nx and ny:
+        try:
+            a, b = float(nx.group(0).replace(",", "")), float(ny.group(0).replace(",", ""))
+            if a == b:
+                return True
+            return abs(a - b) <= max(abs(a), abs(b)) * 0.05      # 5% 이내는 같은 값으로 본다
+        except ValueError:
+            pass
+    return re.sub(r"\s+", "", (x or "")) == re.sub(r"\s+", "", (y or ""))
 
 
 def entities(text):
@@ -139,14 +204,19 @@ def main():
         la.update(ledger(v))
     for k, v in B.items():
         lb.update(ledger(v))
-    keys = set(la) & set(lb)
-    same = {k for k in keys if la[k] == lb[k]}
-    conflict = sorted((k, la[k], lb[k]) for k in keys - same)
-    l3_key = jaccard(set(la), set(lb))
-    l3_val = (len(same) / len(keys)) if keys else None
-    L.append(("L3-a 수치 대장 지표 일치", l3_key, f"A {len(la)}개 · B {len(lb)}개 · 공통 {len(keys)}개"))
-    L.append(("L3-b 공통 지표의 값 일치", l3_val,
-              f"일치 {len(same)} / 충돌 {len(conflict)}" if keys else "공통 지표 없음"))
+    # 지표명이 실행마다 달라지므로 **주제 단위로 짝지어** 비교한다
+    # (「세계 냉매시장 규모(GVR)」 ↔ 「세계 냉매시장 규모(대역)」은 같은 주제로 본다)
+    pairs = match_keys(la, lb)
+    same = [(ka, kb) for ka, kb, _ in pairs if val_equal(la[ka], lb[kb])]
+    conflict = sorted((f"{ka} ↔ {kb}", la[ka], lb[kb])
+                      for ka, kb, _ in pairs if not val_equal(la[ka], lb[kb]))
+    exact = len(set(la) & set(lb))
+    l3_key = (2 * len(pairs) / (len(la) + len(lb))) if (la or lb) else None
+    l3_val = (len(same) / len(pairs)) if pairs else None
+    L.append(("L3-a 수치 대장 주제 일치", l3_key,
+              f"A {len(la)}개 · B {len(lb)}개 · 주제 짝 {len(pairs)}개 (지표명 완전일치 {exact}개)"))
+    L.append(("L3-b 짝지은 주제의 값 일치", l3_val,
+              f"일치 {len(same)} / 충돌 {len(conflict)}" if pairs else "짝지어진 주제 없음"))
 
     # L4 근거 개체 ------------------------------------------------------------
     ea = set().union(*(entities(v) for v in A.values())) if A else set()
