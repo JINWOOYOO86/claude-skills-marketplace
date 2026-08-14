@@ -41,6 +41,8 @@ description: 조사·그림 산출물과 양식 규칙을 종합해 연구계획
 - **명사형 종결**(~함/임/필요/전무/예정/확보)로 끝낸다. `~이다 / ~한다 / ~했다 / ~합니다` 는 F-8b 가 잡는다.
 - **깊이는 2단계까지**(□ → ㅇ). 3단계(`*`)는 편람 관행과 어긋나고 분량만 먹는다.
 - **1단계(□)는 논점, 2단계(ㅇ)는 근거·수치·출처.** 한 항목 160자 이내.
+- **굵기는 제목·표 라벨에만.** 개조식 항목마다 굵은 리드를 달면 **강조가 강조로 보이지 않는다** —
+  본문 굵기 비율 상한 5%를 `gate_form.py` **F-10** 이 본다(실측 교정 전 60% → 후 2%).
 
 ```markdown
 - **규제의 실질 기준선은 750이 아니라 150** — 전환일정 공고·EU F-gas 대조 결과
@@ -153,40 +155,77 @@ npx -y kordoc@^4 generate 30_proposal.build.md -o 30_raw.hwpx \
 
 #### 3-3. 헤더 패치 (양식값 강제 — 프리셋 기본값은 양식과 다르다)
 
-```bash
-python3 - <<'PY'
+패치는 **여백 · 글꼴 · 글자 크기 · 목록 들여쓰기 · 문단 간격** 다섯 가지다. 전부 실측으로 필요성이 확인됐다.
+
+| 항목 | 프리셋 기본값(실측) | 양식값 | 안 고치면 |
+|---|---|---|---|
+| 여백 좌우 | 5669(20mm) | **8504(30mm)** | 서식 미준수 |
+| 글꼴 | 한양신명조·HY견고딕 등 5종 | **돋움** | 안내문과 다른 글꼴 |
+| 본문 글자 | 목록 항목이 **11.73pt** | **11pt** | 눈에 안 띄는 규정 위반(실측 108회) |
+| 표 글자 | 8.8pt | **9pt** | 〃 |
+| 절 제목 | 본문과 같은 11pt | **13pt 굵게** | 장·절 위계 소실 |
+| 목록 내어쓰기 | −1617(약 4칸) | **−1650(약 1.2칸)** | 이어지는 줄이 멀리 밀려 읽기 어렵다 |
+| 목록 문단 위 간격 | □ 22 / ㅇ 14.7pt | **□ 6 / ㅇ 0** | 같은 원고가 10p → 19p |
+
+```python
 import zipfile, re
-src, dst = '30_raw.hwpx', '30_proposal.hwpx'
-zin = zipfile.ZipFile(src); zout = zipfile.ZipFile(dst, 'w')
+zin = zipfile.ZipFile('30_raw.hwpx')
+
+# 제목 스타일은 하드코딩하지 말고 「제목 문단에만 쓰이는 charPr」을 산출물에서 찾는다
+sec0 = zin.read('Contents/section0.xml').decode('utf-8')
+ptxt = lambda p: "".join(re.findall(r'<hp:t>([^<]*)</hp:t>', p)).strip()
+h2, h3, body = set(), set(), set()
+for para in re.findall(r'<hp:p\b.*?</hp:p>', sec0, re.S):
+    cr = re.search(r'charPrIDRef="(\d+)"', para)
+    if not cr: continue
+    t = ptxt(para)
+    (h2 if re.match(r'^\d+\.\s', t) else h3 if re.match(r'^\d+-\d+\.\s', t) else body).add(cr.group(1))
+h2 -= body; h3 -= body          # 본문과 공유하는 스타일은 건드리지 않는다
+
+zout = zipfile.ZipFile('30_proposal.hwpx', 'w')
 for it in zin.infolist():
     d = zin.read(it.filename)
-    if it.filename.startswith('Contents/section'):
-        s = d.decode('utf-8')
-        n = len(re.findall(r'<hp:margin[^>]*/>', s))
-        assert n >= 1, '여백 태그 미검출 — 치환 실패'
-        s = re.sub(r'<hp:margin[^>]*/>',
-                   '<hp:margin header="4252" footer="4252" gutter="0" '
+    if it.filename.startswith('Contents/section'):          # ① 여백
+        s = d.decode('utf-8'); assert len(re.findall(r'<hp:margin[^>]*/>', s)) >= 1
+        s = re.sub(r'<hp:margin[^>]*/>', '<hp:margin header="4252" footer="4252" gutter="0" '
                    'left="8504" right="8504" top="5668" bottom="4252"/>', s)
-        print(f'여백 치환 {n}건')
         d = s.encode('utf-8')
     if it.filename.endswith('header.xml'):
-        h = d.decode('utf-8'); cnt = 0
-        for face in ['함초롬바탕', '함초롬돋움', '한양신명조', '한양중고딕', 'HY견고딕']:
-            cnt += h.count(f'face="{face}"'); h = h.replace(f'face="{face}"', 'face="돋움"')
-        print(f'글꼴 통일 {cnt}건 → 돋움')
-        # ★ 개조식 필수: 목록 문단 위 간격 축소 (미적용 시 같은 원고가 10p → 19p)
-        for pid, prev in [('8', '600'), ('9', '0'), ('10', '0')]:
-            h = re.sub(r'<hh:paraPr id="%s".*?</hh:paraPr>' % pid,
-                       lambda m: re.sub(r'<hc:prev value="\d+"', f'<hc:prev value="{prev}"', m.group(0)),
-                       h, flags=re.S)
+        h = d.decode('utf-8')
+        for f in ['함초롬바탕','함초롬돋움','한양신명조','한양중고딕','HY견고딕']:   # ② 글꼴
+            h = h.replace(f'face="{f}"', 'face="돋움"')
+        for pid, prev, left in [('8','600','0'), ('9','0','1100'), ('10','0','2200')]:  # ③ 목록 간격·들여쓰기
+            def fix(m, prev=prev, left=left):
+                s = m.group(0)
+                s = re.sub(r'<hc:prev value="\d+"',     f'<hc:prev value="{prev}"', s)
+                s = re.sub(r'<hc:left value="\d+"',     f'<hc:left value="{left}"', s)
+                s = re.sub(r'<hc:intent value="-?\d+"', '<hc:intent value="-1650"', s)
+                return s
+            h = re.sub(r'<hh:paraPr id="%s".*?</hh:paraPr>' % pid, fix, h, flags=re.S)
+        def norm(m):                                          # ④ 글자 크기 (제목 제외)
+            cid, blk = m.group(1), m.group(0)
+            if cid in h2 or cid in h3: return blk
+            def sz(mm):
+                v = int(mm.group(1))
+                if 1000 <= v <= 1250: v = 1100                # 본문 11pt
+                elif 850 <= v <= 999: v = 900                 # 표 9pt
+                return f'height="{v}"'
+            return re.sub(r'height="(\d+)"', sz, blk)
+        h = re.sub(r'<hh:charPr id="(\d+)".*?</hh:charPr>', norm, h, flags=re.S)
+        def h3fix(m):                                         # ⑤ 절 제목 13pt 굵게
+            blk = m.group(0)
+            if m.group(1) not in h3: return blk
+            blk = re.sub(r'height="\d+"', 'height="1300"', blk)
+            return blk if '<hh:bold' in blk else blk.replace('</hh:charPr>', '<hh:bold/></hh:charPr>')
+        h = re.sub(r'<hh:charPr id="(\d+)".*?</hh:charPr>', h3fix, h, flags=re.S)
         d = h.encode('utf-8')
     zi = zipfile.ZipInfo(it.filename, date_time=it.date_time)
     zi.compress_type = zipfile.ZIP_STORED if it.filename == 'mimetype' else zipfile.ZIP_DEFLATED
     zout.writestr(zi, d)
 zout.close()
-PY
 ```
 ⚠️ `mimetype` 은 **ZIP_STORED** 여야 한다. 이걸 놓치면 열리지 않는다.
+검증은 `gate_form.py` **F-9(글자 크기)·F-10(본문 굵기)** 가 한다.
 
 #### 3-4. 검증
 
@@ -253,7 +292,7 @@ python3 $S/gate_regress.py --prev <직전 판 md> --curr 30_proposal.md \
 | **G 조사 반영 완결** | 조사 결론을 **절반만** 옮기지 않는다. 조사파일에서 `계획서에는`·`명기해야`·`그대로 두면`·`각주 필수`·`권고`를 grep해 전량 목록화하고 체크박스로 관리 | 신규 결함 10건 중 8건이 이 표식을 가진 문장이었다(GWP 값만 옮기고 기준연도·출처 누락) |
 | **H 회귀 게이트** | 새 조치를 넣기 전에 **직전 라운드 「완전 해소 확정」 항목을 전수 재검사**. `scripts/gate_regress.py` 사용 | 압축이 직전 라운드 확정분 4건을 되돌림 |
 | **I → J에 흡수** | ~~필수기재 존재 검사~~ **단독 운용 폐지.** **존재 검사 단독은 거짓 통과를 발급한다** | "평가방법 8행 존재" 검사가 통과시킨 표가 산출물에서는 2개로 쪼개져 있었다 |
-| **K 양식 준수 게이트** | `scripts/gate_form.py` — ①장·절 제목 **축자 일치**와 순서 ②절 신설·누락 0 ③**절별 요구 항목 커버리지**(양식 설명문을 프로브로 환산) ④지정 서식([표 A]·[표 B]·KPI 5요소·가중치 100%·기술분류 3순위·핵심어 5개) ⑤**양식 설명문 잔존 0** ⑥표 열수·개수 상한 ⑦**개조식 준수**(말머리 비율·서술형 종결·항목 길이). 양식이 「권장」으로 쓴 항목은 **WARN**으로 낮춰 통과를 막지 않는다 | 「양식대로 썼다」는 자기보고가 실제와 달랐다 — 실측: 절 커버리지 39개 중 **3개 미충족**, 가중치 합 없음, 설명문 1건 잔존, 8·13열 표 상존 |
+| **K 양식 준수 게이트** | `scripts/gate_form.py` — ①장·절 제목 **축자 일치**와 순서 ②절 신설·누락 0 ③**절별 요구 항목 커버리지**(양식 설명문을 프로브로 환산) ④지정 서식([표 A]·[표 B]·KPI 5요소·가중치 100%·기술분류 3순위·핵심어 5개) ⑤**양식 설명문 잔존 0** ⑥표 열수·개수 상한 ⑦**개조식 준수**(말머리·서술형 종결·항목 길이) ⑧**글자 크기 규율**(본문 11 / 절 13 / 장 16 / 표 9pt) ⑨**본문 굵기 절제**. 양식이 「권장」으로 쓴 항목은 **WARN**으로 낮춰 통과를 막지 않는다 | 「양식대로 썼다」는 자기보고가 실제와 달랐다 — 실측: 절 커버리지 39개 중 **3개 미충족**, 가중치 합 없음, 설명문 1건 잔존, 8·13열 표 상존 |
 | **L 분량 실측 게이트** | `scripts/gate_pages.py` — 한컴 COM 으로 열어 `PageCount` 를 읽고 **PDF 로 저장해 장 제목의 시작 쪽·쪽 안 세로 위치**까지 판독한다. 장별 점유를 **소수 쪽 단위**로 재서 배분(0:1/1:2/2:2/3:3/4:2)과 대조하고, 초과 시 **원인(산문 자수·표 개수·열수·그림)까지 분해**해 보고한다 | 「10p 내외」를 눈대중으로 통과시킨 판이 실측 **14p**였다. 총량만 보면 「3장이 배분의 1.3배」 같은 편중을 못 잡는다 |
 | **J 산출물 구조 게이트** | `scripts/gate_hwpx.py` — 표 형상 덤프·고아 표·판 간 형상 diff·표 내부 제외 문단 자수·이중 이스케이프·XML 선언·격자 재검산·§ 참조 실존·필수 문자열·**강조(굵기) 보존(J-14)**. **`--md` 를 반드시 함께 준다** — 없으면 J-14가 원고 대조 없이 INFO로만 지나간다. **모든 체크에 「측정 매체」를 명시하고, md 단독 측정 항목에는 「통과」를 발급하지 않는다** | 「존재는 있고 구조가 깨진」 결함 **4건이 전부 존재 검사를 통과**했다(references §1). 4번째는 **굵은 글씨 594 span 전량 소실** — 본문 텍스트는 멀쩡해서 자수·존재 검사로는 영원히 안 잡힌다 |
 

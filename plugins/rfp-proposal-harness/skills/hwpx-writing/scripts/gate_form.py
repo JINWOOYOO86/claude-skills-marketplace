@@ -207,6 +207,83 @@ def sp_fig_or_table(doc, sid):
     return (n_t + n_p) > 0, f"표 {n_t}개 · 그림 {n_p}장"
 
 
+def typography_check(path, spec):
+    """F-9·F-10 글자 크기·굵기 규율.
+
+    양식이 정한 크기는 **본문 11 / 절 13 / 장 16 / 표 9pt** 다. 조립 도구는 이를 지키지 않는다 —
+    실측에서 목록 글자가 **11.73pt** 로 108회 나갔고 표는 8.8pt 였다(둘 다 눈으로는 안 보인다).
+    굵기도 마찬가지다. 개조식 항목마다 굵은 리드를 달면 **강조가 강조로 안 보인다** — 제목·표 라벨만 남긴다.
+
+    ★ 제목 스타일은 하드코딩하지 않고 **제목 문단에만 쓰이는 charPr** 을 산출물에서 찾아 판별한다.
+    """
+    style = (spec or {}).get("style") or {}
+    body_pt = float(style.get("body_pt", 11))
+    tbl_pt = float(style.get("table_pt", 9))
+    h2_pt = float(style.get("chapter_title_pt", 16))
+    h3_pt = float(style.get("section_title_pt", 13))
+    tol = float(style.get("size_tolerance_pt", 0.3))
+
+    zf = zipfile.ZipFile(path)
+    head = zf.read("Contents/header.xml").decode("utf-8")
+    sizes, bolds = {}, {}
+    for m in re.finditer(r'<hh:charPr id="(\d+)"(.*?)</hh:charPr>', head, re.S):
+        cid, blk = m.group(1), m.group(2)
+        hm = re.search(r'height="(\d+)"', blk)
+        sizes[cid] = int(hm.group(1)) / 100 if hm else None
+        bolds[cid] = "<hh:bold" in blk
+
+    sec = "".join(zf.read(n).decode("utf-8")
+                  for n in sorted(zf.namelist()) if n.startswith("Contents/section"))
+    spans = [(m.start(), m.end()) for m in re.finditer(r"<hp:tbl\b.*?</hp:tbl>", sec, re.S)]
+    in_tbl = lambda pos: any(a <= pos < b for a, b in spans)
+
+    # 제목 전용 charPr 판별
+    h2c, h3c, bodyc = set(), set(), set()
+    for para in re.findall(r"<hp:p\b.*?</hp:p>", sec, re.S):
+        cr = re.search(r'charPrIDRef="(\d+)"', para)
+        if not cr:
+            continue
+        t = "".join(re.findall(r"<hp:t>([^<]*)</hp:t>", para)).strip()
+        (h2c if re.match(r"^\d+\.\s", t) else h3c if re.match(r"^\d+-\d+\.\s", t) else bodyc).add(cr.group(1))
+    h2c -= bodyc
+    h3c -= bodyc
+
+    # 본문은 문단 단위로 본다 — 캡션·표주석(※·그림·표)은 작은 글씨가 관행이라 예외다
+    cap_pt = float(style.get("caption_pt", tbl_pt))
+    body_bad, tbl_bad, n_body, n_bold = [], [], 0, 0
+    first_tbl = spans[0] if spans else None
+    for m in re.finditer(r"<hp:p\b.*?</hp:p>", sec, re.S):
+        para, pos = m.group(0), m.start()
+        cr = re.search(r'charPrIDRef="(\d+)"', para)
+        if not cr:
+            continue
+        cid = cr.group(1)
+        pt = sizes.get(cid)
+        if pt is None or pt <= 2:          # 1pt 자리표시(빈 셀)는 무시
+            continue
+        text = "".join(re.findall(r"<hp:t>([^<]*)</hp:t>", para)).strip()
+        if in_tbl(pos):
+            # 표지 박스(첫 표)는 조립 도구가 만든 제목 상자라 검사 대상이 아니다
+            if first_tbl and first_tbl[0] <= pos < first_tbl[1]:
+                continue
+            if abs(pt - tbl_pt) > tol:
+                tbl_bad.append(pt)
+            continue
+        want = h2_pt if cid in h2c else h3_pt if cid in h3c else body_pt
+        is_caption = text.startswith(("※", "그림", "표 ", "[표", "[그림"))
+        if abs(pt - want) > tol and not (is_caption and abs(pt - cap_pt) <= tol):
+            body_bad.append((pt, want))
+        if cid not in h2c and cid not in h3c:
+            n_body += 1
+            n_bold += 1 if bolds.get(cid) else 0
+    return {
+        "body_bad": body_bad, "tbl_bad": tbl_bad,
+        "bold_ratio": (n_bold / n_body) if n_body else 0.0,
+        "n_body": n_body, "n_bold": n_bold,
+        "spec": f"본문 {body_pt:g} / 절 {h3_pt:g} / 장 {h2_pt:g} / 표 {tbl_pt:g}pt",
+    }
+
+
 def style_check(doc, spec):
     """F-8 개조식 준수 — 본문 문단이 「말머리 + 명사형 종결」인지 본다.
 
@@ -400,6 +477,18 @@ def main():
         check(f"F-8c 항목 길이(≤{ws.get('max_item_chars',160)}자)", not st["longs"],
               f"초과 {len(st['longs'])}건 {st['longs'][:3]}" if st["longs"] else "전 항목 이내",
               "hwpx", "warn")
+
+    # F-9·F-10 글자 크기·굵기 -------------------------------------------------
+    tg = typography_check(a.hwpx, spec)
+    bad = len(tg["body_bad"]) + len(tg["tbl_bad"])
+    check("F-9 글자 크기 규율", not bad,
+          (f"규격 외 {bad}건 — 본문 {sorted({p for p, _ in tg['body_bad']})} · "
+           f"표 {sorted(set(tg['tbl_bad']))}") if bad else f"{tg['spec']} 전량 준수",
+          "hwpx")
+    bmax = float((spec.get("style") or {}).get("bold_ratio_max", 0.05))
+    check(f"F-10 본문 굵기 절제(≤{bmax:.0%})", tg["bold_ratio"] <= bmax,
+          f"본문 {tg['n_body']} run 중 굵기 {tg['n_bold']} ({tg['bold_ratio']:.0%}) — 제목·표 라벨 제외",
+          "hwpx", "warn")
 
     ok = not fails
     print(f"\n{'='*60}\n{'PASS' if ok else 'FAIL'} — 실패 {len(fails)}건"

@@ -19,7 +19,20 @@
     "orientation": "세로",
     "body_font": "돋움",
     "body_pt": 11,
-    "line_spacing": 160
+    "line_spacing": 160,
+    "chapter_title_pt": 16,
+    "section_title_pt": 13,
+    "table_pt": 9,
+    "size_tolerance_pt": 0.3,
+    "bold_ratio_max": 0.05,
+    "bold_note": "굵기는 제목·표 라벨에만. 본문 개조식 항목에는 쓰지 않는다(강조가 많으면 강조가 사라진다).",
+    "list_indent": {
+      "level2_left_hwpunit": 1100,
+      "hanging_hwpunit": -1650,
+      "note": "이어지는 줄은 말머리에서 1~2칸 안쪽. kordoc 기본값(내어쓰기 -1617 · left 0/1100/2200)은 약 4칸이라 과하다 — 헤더 패치로 교정한다."
+    },
+    "caption_pt": 9,
+    "caption_note": "그림 캡션·표주석(※)은 9pt 허용. 표지 상자(조립 도구가 만드는 첫 표)는 크기 검사 대상이 아니다."
   },
   "limits": {
     "prose_chars": 9000,
