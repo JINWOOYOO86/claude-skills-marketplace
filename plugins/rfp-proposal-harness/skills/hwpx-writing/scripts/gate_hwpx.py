@@ -36,6 +36,7 @@ FORBIDDEN = {
     "이형 공백 U+FEFF": "﻿",
     "미치환 플레이스홀더": "[보완 필요",
     "TODO 잔존": "TODO",
+    "미변환 마크다운 강조": "**",
 }
 # 이중 이스케이프 — 3패턴 전부 검사할 것(1패턴만 보면 놓친다)
 ESCAPE_PATTERNS = [r"&amp;amp;", r"&amp;lt;", r"&amp;gt;"]
@@ -103,7 +104,9 @@ def grid_check(root):
         if len(rows) < 3:
             continue
         last = rows[-1]
-        if not last or not re.search(r"계|합계|총계", last[0]):
+        # ★ 함정(실측): re.search(r"계") 는 「2단계」의 '계' 에도 매칭돼 거짓 FAIL 을 낸다.
+        #    합계 행은 첫 셀이 「계/합계/총계/소계」 **그 자체**일 때만 인정한다(부분문자열 금지).
+        if not last or not re.fullmatch(r"\s*(계|합계|총계|소계)\s*", last[0]):
             continue
         # 열별 세로합 대조 (헤더 1행 가정, 마지막 행은 계)
         for c in range(1, min(len(last), min(len(r) for r in rows))):
@@ -122,6 +125,49 @@ def grid_check(root):
             if abs(s - tv) > 0.051:  # 0.1 단위 반올림 허용
                 findings.append(f"표{idx} 제{c+1}열 세로합 불일치: 계산 {s} vs 표기 {tv}")
     return findings
+
+
+def page_check(raw, paper="A4", want_portrait=True):
+    """J-16 용지 규격·방향 정합성.
+
+    ★ 실측 사고(2026-08-13): 산출물이 **A4 세로 치수(210×297mm)인데 `landscape="WIDELY"`(가로)**로
+    저장돼 있었다. 치수와 방향 속성이 어긋난 상태이며, 한글이 어느 쪽을 따르느냐에 따라
+    다르게 열릴 수 있다. **문서를 열어보기 전에는 드러나지 않는 계열**이라 기계로 검사한다.
+
+    ★★ 값의 의미는 직관과 반대다 (2026-08-13 PDF 실측으로 확정):
+      **WIDELY = 세로(Portrait) / NARROWLY = 가로(Landscape)**
+    같은 문서를 NARROWLY 로 두면 한글이 297×210mm(가로)로 조판하고, WIDELY 로 두면 210×297mm(세로)다.
+    `width`/`height` 속성은 **용지 크기일 뿐 방향을 결정하지 않는다** — 방향은 이 속성이 지배한다.
+    검증 방법: 한글 COM 으로 PDF 저장 후 `/MediaBox` 를 읽는다. COM PageSetup 조회는 빈 값을 돌려준다.
+    반환: (mm 폭, mm 높이, landscape 값, 문제 목록)
+    """
+    SPEC = {"A4": (210.0, 297.0), "A3": (297.0, 420.0), "B5": (176.0, 250.0), "Letter": (215.9, 279.4)}
+    m = re.search(r"<hp:pagePr[^>]*>", raw)
+    if not m:
+        return (None, None, None, ["hp:pagePr 미검출"])
+    tag = m.group(0)
+    def num(k):
+        mm = re.search(rf'{k}="(\d+)"', tag)
+        return int(mm.group(1)) if mm else None
+    w, h = num("width"), num("height")
+    ls = re.search(r'landscape="([^"]+)"', tag)
+    ls = ls.group(1) if ls else None
+    if w is None or h is None:
+        return (None, None, ls, ["width/height 미검출"])
+    wm, hm = w / 7200 * 25.4, h / 7200 * 25.4
+    bad = []
+    ORIENT = {"WIDELY": "세로", "NARROWLY": "가로"}
+    if ls not in ORIENT:
+        bad.append(f"landscape 속성 이상: {ls!r}")
+    elif want_portrait and ls != "WIDELY":
+        bad.append(f"세로를 요구했는데 landscape={ls}(가로)다 — 「WIDELY = 세로」임에 유의")
+    # 규격 대조 (세로/가로 양쪽 허용)
+    if paper in SPEC:
+        pw, ph = SPEC[paper]
+        if not ((abs(wm - pw) < 1.5 and abs(hm - ph) < 1.5) or
+                (abs(wm - ph) < 1.5 and abs(hm - pw) < 1.5)):
+            bad.append(f"{paper} 규격 불일치: 실측 {wm:.0f}×{hm:.0f}mm (기대 {pw:.0f}×{ph:.0f}mm)")
+    return (wm, hm, ORIENT.get(ls, ls), bad)
 
 
 def emphasis_check(parts, md_path):
@@ -184,6 +230,8 @@ def main():
     ap.add_argument("--required", help="필수 문자열 목록 파일(1줄 1항목)")
     ap.add_argument("--sections", help="실존 절 목록 파일(1줄 1항목, 예 §2-3)")
     ap.add_argument("--md", help="원고 Markdown — J-14 강조(굵기) 보존 대조용")
+    ap.add_argument("--titles", help="양식 절 제목 목록 파일(1줄 1제목) — J-15 축자 대조용")
+    ap.add_argument("--paper", default="A4", help="용지 규격 — J-16 대조용 (A4/A3/B5/Letter)")
     ap.add_argument("--max-para", type=int, default=1000, help="본문 문단 자수 상한")
     ap.add_argument("--json", help="결과 JSON 출력 경로")
     a = ap.parse_args()
@@ -319,6 +367,21 @@ def main():
     else:
         check("J-14 강조(굵기) 보존", napp >= nsrc * 0.5,
               f"원고 {nsrc}개 → 적용 run {napp}개 (정의 {ndef}종)")
+
+    # J-15 절 제목 축자 대조 — 개명·접미추가·띄어쓰기 변형·절 신설을 잡는다
+    if a.titles:
+        want = [l.strip() for l in open(a.titles, encoding="utf-8") if l.strip()]
+        body = re.sub(r"\s+", " ", "\n".join(
+            local_text(p) for p in root.iter(f"{{{HP}}}p")))
+        miss = [t for t in want if re.sub(r"\s+", " ", t) not in body]
+        check("J-15 절 제목 축자 일치", not miss,
+              f"불일치 {len(miss)}건: {miss[:4]}" if miss else f"{len(want)}종 전량 원문 일치")
+
+    # J-16 용지 규격·방향 정합성 — 열어보기 전에는 드러나지 않는다
+    wm, hm, ls, pbad = page_check(raw, a.paper)
+    check(f"J-16 용지 규격·방향({a.paper})", not pbad,
+          "; ".join(pbad) if pbad else
+          f"{wm:.0f}×{hm:.0f}mm · {ls}")
 
     ok = not fails
     print(f"\n{'='*60}\n{'PASS' if ok else 'FAIL'} — 실패 {len(fails)}건")

@@ -62,6 +62,13 @@ Phase 4  평가위원단 6인 병렬채점 → 위원장 종합 → REVISE면 �
 1. `figure-designer` 실행(조사 결과 기반) → `20_figures/`.
 2. `hwpx-writer` 실행 → `30_proposal.hwpx`/`30_proposal.md` + `30_proposal_manifest.md`.
    - HWPX 조립은 `hwpx-writer`가 **kordoc**(`npx`, 설치 불필요)으로 처리한다. Node.js 18+ 프리플라이트가 실패하면 **조용히 md 폴백하지 말고 중단·보고**.
+   - **원고는 양식 스캐폴드에서 시작한다**(`form_scaffold.py`) — 양식이 각 절에 요구한 세부 설명이 주석으로 들어가고,
+     집필자는 그 항목을 채운다. **조립 직전 `form_strip.py` 로 설명문을 전량 제거**한 `*.build.md` 로 빌드한다.
+3. ★ **양식·분량 게이트를 통과해야 Phase 4로 넘어간다.** 통과 못 하면 위원단을 부르지 않는다 —
+   양식 위반은 위원이 판단할 사안이 아니라 **작성 단계에서 기계로 끝내는 사안**이다.
+   - `gate_form.py` → `50_gate_form.json` (제목 축자·절 신설 0·요구항목 커버리지·지정서식·설명문 잔존 0)
+   - `gate_pages.py` → `50_gate_pages.json` (총 쪽수 실측 + **장별 배분** 대조)
+   - 두 JSON 은 Phase 4 형식 축 위원의 **필수 인용 자료**다. 개정할 때마다 재실행해 갱신한다.
 
 ## Phase 4: 검수·고도화 (평가위원단 95점 게이트 루프)
 `proposal-evaluation-panel` 스킬에 위임한다. 6인 위원단(위원장·기술성·실현가능성·사업화·근거정합성·형식규정)이
