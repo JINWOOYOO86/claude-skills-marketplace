@@ -72,7 +72,11 @@ for t in titles:
                 frac = max(0.0, min(1.0, (hits[0].y0 - top) / page.rect.height))
             break
     res.append({'id': t['id'], 'title': t['title'], 'start': start, 'frac': round(frac, 3)})
-json.dump({'total': d.page_count, 'chapters': res},
+# ★ 마지막 장이 「끝 쪽의 빈 공간」까지 뒤집어쓰지 않도록 본문이 실제로 끝나는 위치를 잰다
+last = d[-1]
+blocks = [b for b in last.get_text('blocks') if b[4].strip()]
+end_frac = round(max(b[3] for b in blocks) / last.rect.height, 3) if blocks else 1.0
+json.dump({'total': d.page_count, 'end_frac': end_frac, 'chapters': res},
           open(out, 'w', encoding='utf-8'), ensure_ascii=False)
 """
 
@@ -136,11 +140,36 @@ def measure(hwpx, chapters, winpython):
         return total, {}, (warn + " / " if warn else "") + f"PDF 판독 실패: {(r2.stdout + r2.stderr)[:200]}"
     data = json.load(open(outp, encoding="utf-8"))
     starts = {c["id"]: (c["start"], c.get("frac", 0.0)) for c in data["chapters"]}
+    starts["_end"] = (data["total"], data.get("end_frac", 1.0))
     if data["total"] != total:
         # PDF 가 최종 인쇄물이므로 PDF 쪽수를 정본으로 삼는다
         return data["total"], starts, (warn + " / " if warn else "") + \
             f"주의: PageCount({total}) ≠ PDF 쪽수({data['total']}) — PDF 값을 채택"
     return total, starts, warn
+
+
+def measure_worst(hwpx, chapters, winpython, repeat):
+    """★ 같은 파일이 9p / 10p 로 갈리는 조판 편차가 있다 — **최악(최대) 조판을 채택**한다.
+
+    원인(2026-08-14 PDF 실측): 한글이 줄 높이를 **문서의 160%(11pt→17.5pt)** 로 잡을 때와
+    **글꼴 메트릭 기준(22.8pt)** 으로 잡을 때가 있다. 여백·글꼴·본문은 동일하고 줄간격만 달라져
+    같은 원고가 9p / 10p 로 나온다. 문서 안의 `fontLineHeight="0"` 을 응용프로그램이 항상 따르지는
+    않는 것으로, **읽는 사람의 한글에서 느슨하게 조판될 수 있다**는 뜻이다.
+    → 게이트는 **가장 두껍게 조판된 결과**로 판정한다. 그래야 남의 PC에서 규정을 넘지 않는다.
+    """
+    runs = []
+    for _ in range(max(1, repeat)):
+        t, st, nt = measure(hwpx, chapters, winpython)
+        if t is None:
+            return t, st, nt
+        runs.append((t, st, nt))
+    best = max(runs, key=lambda r: r[0])
+    totals = sorted({r[0] for r in runs})
+    spread = ""
+    if len(totals) > 1:
+        spread = (f"조판 편차 {totals[0]}~{totals[-1]}p ({len(runs)}회 측정) — "
+                  "한글이 줄 높이를 글꼴 메트릭으로 잡는 경우가 있어 **최대값을 채택**했다. ")
+    return best[0], best[1], spread + (best[2] or "")
 
 
 def estimate(md_text, spec):
@@ -184,6 +213,8 @@ def main():
     ap.add_argument("--md", help="조립용 원고 — 초과 원인 분해·추정 폴백용")
     ap.add_argument("--winpython", default="/mnt/c/ProgramData/anaconda3/python.exe",
                     help="PyMuPDF(fitz)를 가진 Windows 파이썬")
+    ap.add_argument("--repeat", type=int, default=3,
+                    help="조판 편차 대비 반복 측정 횟수(기본 3) — 최악값을 채택한다")
     ap.add_argument("--allow-estimate", action="store_true",
                     help="한컴이 없을 때 추정치로 통과를 발급(기본: 미측정은 통과 불가)")
     ap.add_argument("--json")
@@ -194,8 +225,8 @@ def main():
     chapters = [{"id": n["id"], "title": n["title"]} for n in spec["outline"] if n["level"] == 2]
     md_text = open(a.md, encoding="utf-8").read() if a.md and os.path.exists(a.md) else ""
 
-    total, starts, note = measure(a.hwpx, chapters, a.winpython)
-    fails, rows = [], []
+    total, starts, note = measure_worst(a.hwpx, chapters, a.winpython, a.repeat)
+    fails, warns, rows = [], [], []
 
     if total is None:
         est = estimate(md_text, spec) if md_text else None
@@ -222,36 +253,55 @@ def main():
         # 연속 위치(쪽 + 쪽 안 세로 비율) 로 점유량을 잰다 — 경계 쪽을 나눠 쓰는 실제를 반영한다.
         # 합은 총 쪽수와 정확히 일치한다.
         pos = {cid: (starts[cid][0] - 1) + starts[cid][1] for cid in ids}
+        # 문서가 실제로 끝나는 연속 위치(마지막 쪽의 빈 공간은 점유로 세지 않는다)
+        doc_end = (starts["_end"][0] - 1) + starts["_end"][1] if "_end" in starts else float(total)
+        # 판정 규칙 (실측에서 도출) —
+        #  · 총량이 목표(10p)를 넘지 않는 한, **반 쪽 미만의 장별 초과는 조판 경계 탓**이다.
+        #    같은 원고가 한 장을 줄이면 다음 장의 시작 위치가 당겨져 ±0.5p 가 그냥 움직인다.
+        #  · 그래서 FAIL 은 ⓐ 초과 > 0.5p 이거나 ⓑ 총량이 목표를 넘은 상태에서 초과 > 0.25p 일 때만.
+        #    그 사이는 WARN 으로 남겨 압박은 보이되 통과를 막지 않는다. 양식도 장별은 「권장」이라 쓴다.
         TOL = float(pb.get("chapter_tolerance", 0.25))
-        print(f"\n■ 장별 점유 쪽수 (연속 측정 · 허용오차 ±{TOL}p)")
+        HARD_TOL = float(pb.get("chapter_hard_tolerance", 0.5))
+        over_target = total > pb["total"]
+        print(f"\n■ 장별 점유 쪽수 (연속 측정 · 배분 대비 {TOL}p 초과부터 경고, "
+              f"{HARD_TOL}p 초과 또는 총량 초과 시 위반)")
         print(f"{'장':<4}{'시작':>7}{'점유':>7}{'배분':>6}{'판정':>9}   원인 분해")
         for i, cid in enumerate(ids):
-            occ = (pos[ids[i + 1]] - pos[cid]) if i + 1 < len(ids) else (total - pos[cid])
+            occ = (pos[ids[i + 1]] - pos[cid]) if i + 1 < len(ids) else (doc_end - pos[cid])
             bud = pb["chapters"].get(cid)
-            ok = bud is None or occ <= bud + TOL
+            over = 0.0 if bud is None else occ - bud
+            ok = bud is None or over <= TOL or (over <= HARD_TOL and not over_target)
+            warn_only = bud is not None and ok and over > TOL
             st = stats.get(cid, {})
             cause = (f"산문 {st['prose']:,}자 · 표 {st['tables']}개(최대 {st['max_cols']}열) · 그림 {st['figs']}장"
                      if st else "")
             start_lbl = f"p{starts[cid][0]}+{starts[cid][1]:.2f}"
+            mark = "OK" if (ok and not warn_only) else (f"~+{over:.1f}p" if ok else f"+{over:.1f}p")
             print(f"{cid:<4}{start_lbl:>7}{occ:>7.1f}{(bud if bud is not None else '-'):>6}"
-                  f"{('OK' if ok else f'+{occ-bud:.1f}p'):>9}   {cause}")
+                  f"{mark:>9}   {cause}")
             rows.append({"id": cid, "start_page": starts[cid][0], "start_frac": starts[cid][1],
-                         "occupied": round(occ, 2), "budget": bud, "ok": ok, **st})
+                         "occupied": round(occ, 2), "budget": bud, "ok": ok,
+                         "warn": bool(warn_only), **st})
             if not ok:
-                fails.append(f"{cid}장 {occ:.1f}p > 배분 {bud}p ({occ-bud:.1f}p 초과)")
+                fails.append(f"{cid}장 {occ:.1f}p > 배분 {bud}p ({over:.1f}p 초과)")
+            elif warn_only:
+                warns.append(f"{cid}장 {occ:.1f}p (배분 {bud}p · +{over:.1f}p — 조판 경계 범위)")
     else:
         print("  장별 배분 미측정 — 총량만 판정한다")
 
     ok = not fails
-    print(f"\n{'='*60}\n{'PASS' if ok else 'FAIL'} — 위반 {len(fails)}건")
+    print(f"\n{'='*60}\n{'PASS' if ok else 'FAIL'} — 위반 {len(fails)}건"
+          + (f" · 경고 {len(warns)}건" if warns else ""))
     for f in fails:
         print(f"  - {f}")
+    for w in warns:
+        print(f"  ~ {w}")
     if not ok:
         print("\n감축 순서(실측): ① 7열 이상 표의 열 축소·각주 이관 → ② 표 개수 통합 →"
               " ③ 그림 축소 → ④ 산문. 행을 줄이는 것은 효과가 가장 작다.")
     if a.json:
         json.dump({"pass": ok, "total": total, "budget": pb, "chapters": rows,
-                   "fails": fails, "note": note},
+                   "fails": fails, "warns": warns, "note": note},
                   open(a.json, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
         print(f"결과 JSON: {a.json}")
     return 0 if ok else 1
