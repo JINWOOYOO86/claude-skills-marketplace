@@ -191,8 +191,12 @@ def main():
     L.append(("L1 산출 구성", l1, f"공통 {len(fa & fb)} / A만 {sorted(fa - fb)} / B만 {sorted(fb - fa)}"))
 
     # L2 문서 구조 ------------------------------------------------------------
-    pa = "\n".join(v for k, v in A.items() if k.startswith(a.proposal))
-    pb = "\n".join(v for k, v in B.items() if k.startswith(a.proposal))
+    # ★ 접두어만 보면 `30_proposal_manifest.md`·`_prev` 같은 부속 파일이 딸려 들어와
+    #   L2(문서 구조)가 거짓으로 낮아진다. 계획서 본문만 고른다.
+    def is_body(k):
+        return k.startswith(a.proposal) and not re.search(r"manifest|prev|_v\d", k)
+    pa = "\n".join(v for k, v in A.items() if is_body(k))
+    pb = "\n".join(v for k, v in B.items() if is_body(k))
     oa, ob = outline(pa), outline(pb)
     l2 = jaccard(oa, ob) if (oa or ob) else None
     L.append(("L2 문서 구조(장·절)", l2,
