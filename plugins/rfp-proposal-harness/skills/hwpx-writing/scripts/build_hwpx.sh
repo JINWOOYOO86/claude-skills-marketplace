@@ -13,7 +13,14 @@ set -e
 WS="${1:?워크스페이스 경로가 필요하다}"
 SRC="${2:-30_proposal.md}"
 NTBL="${3:-}"
-S="${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/cache/jinwoo-skills/rfp-proposal-harness/0.19.0}/skills"
+# 스킬 경로 — CLAUDE_PLUGIN_ROOT 가 있으면 그것을, 없으면 **설치된 최신 버전**을 쓴다.
+# (버전을 하드코딩하면 플러그인을 올린 뒤에도 옛 스킬로 조립된다 — 실측으로 겪었다.)
+if [ -n "$CLAUDE_PLUGIN_ROOT" ]; then S="$CLAUDE_PLUGIN_ROOT/skills"; else
+  CACHE="$HOME/.claude/plugins/cache/jinwoo-skills/rfp-proposal-harness"
+  LATEST=$(ls -1 "$CACHE" 2>/dev/null | sort -V | tail -1)
+  S="$CACHE/$LATEST/skills"
+fi
+[ -d "$S" ] || { echo "!! 스킬 경로를 찾지 못했다: $S"; exit 1; }
 SPEC="$WS/01_template_spec.json"
 [ -f "$SPEC" ] || SPEC="$S/template-extraction/assets/default-form/default_form_spec.json"
 
