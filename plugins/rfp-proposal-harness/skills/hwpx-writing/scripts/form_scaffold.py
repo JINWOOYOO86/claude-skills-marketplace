@@ -61,7 +61,15 @@ def build(spec):
                 out.append(f"[분량] {chap}장 배분 {ch_budget[chap]}p 안에서 소화한다")
             out.append("-->")
             out.append("")
-        if node["level"] == 3 and (spec.get("writing_style") or {}).get("mode") == "개조식":
+        bp = node.get("blueprint") or []
+        if bp:
+            # ★ 골격 = 1단계(□) 리드 항목을 이름·순서까지 고정한다.
+            #   실측: 골격 없이 쓰면 같은 과제·같은 양식이어도 서술 유사도가 0.62 에 머문다.
+            for lead in bp:
+                out.append(f"- **{lead}** — (한 줄 결론)")
+                out.append("  - (근거·수치·출처 — 확정 수치 대장에서만 인용)")
+            out.append("")
+        elif node["level"] == 3 and (spec.get("writing_style") or {}).get("mode") == "개조식":
             out.append("- **(논점을 한 줄로)** — (핵심 근거 요약)")
             out.append("  - (근거·수치·출처)")
             out.append("")
