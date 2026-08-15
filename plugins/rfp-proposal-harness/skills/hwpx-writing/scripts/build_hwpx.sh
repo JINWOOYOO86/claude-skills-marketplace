@@ -105,8 +105,11 @@ set +e; RC=0
 npx -y kordoc@^4 validate 30_proposal.hwpx
 EXPECT=""; [ -n "$NTBL" ] && EXPECT="--expect-tables $NTBL"
 python3 "$S/hwpx-writing/scripts/gate_hwpx.py"  --hwpx 30_proposal.hwpx --md 30_proposal.md $EXPECT || RC=1
-python3 "$S/hwpx-writing/scripts/gate_form.py"  --hwpx 30_proposal.hwpx --md 30_proposal.md --spec "$SPEC" --json "$WS/50_gate_form.json"  || RC=1
-python3 "$S/hwpx-writing/scripts/gate_pages.py" --hwpx 30_proposal.hwpx --md 30_proposal.md --spec "$SPEC" --json "$WS/50_gate_pages.json" || RC=1
+# 게이트 JSON 은 **원고 이름을 접두사로** 남긴다 — 고정 이름이면 다음 판이 직전 판 결과를 덮어써
+# 판 간 비교가 불가능해진다(실측으로 겪었다).
+BASE="${SRC%.md}"
+python3 "$S/hwpx-writing/scripts/gate_form.py"  --hwpx 30_proposal.hwpx --md 30_proposal.md --spec "$SPEC" --json "$WS/${BASE}_gate_form.json"  || RC=1
+python3 "$S/hwpx-writing/scripts/gate_pages.py" --hwpx 30_proposal.hwpx --md 30_proposal.md --spec "$SPEC" --json "$WS/${BASE}_gate_pages.json" || RC=1
 
 cp 30_proposal.hwpx "$WS/${SRC%.md}.hwpx"
 cp 30_proposal.md   "$WS/${SRC%.md}.build.md"

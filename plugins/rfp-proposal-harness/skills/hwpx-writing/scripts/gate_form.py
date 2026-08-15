@@ -201,6 +201,18 @@ def sp_weight100(tables):
     return False, "합이 100%인 가중치 열을 찾지 못함"
 
 
+def sp_table_c(tables):
+    """[표 C] 연차별 연구내용 — 열 `연차/내용/방법/근거` 4열."""
+    for rows in tables:
+        if not rows:
+            continue
+        head = norm(" ".join(rows[0]))
+        if len(rows[0]) >= 4 and "연차" in head and "내용" in head and "방법" in head:
+            return True, f"[표 C] {len(rows[0])}열 {len(rows)}행"
+    shapes = [f"{len(r)}행×{len(r[0]) if r else 0}열" for r in tables]
+    return False, f"연차/내용/방법/근거 4열 표 없음 (실측 {shapes})"
+
+
 def sp_fig_or_table(doc, sid):
     s = doc.sections.get(sid, {})
     n_t, n_p = len(s.get("tables", [])), s.get("pics", 0)
@@ -403,6 +415,8 @@ def main():
                 ok, d = sp_keywords5(tx)
             elif sp == "TABLE_A":
                 ok, d = sp_table_a(tb)
+            elif sp == "TABLE_C":
+                ok, d = sp_table_c(tb)
             elif sp == "TABLE_B":
                 ok, d = sp_table_b(tb)
             elif sp == "KPI5":
