@@ -173,6 +173,45 @@ def outline(text):
     return {re.sub(r"\s+", "", h) for h in re.findall(r"^#{2,3}\s+(.+?)\s*$", text, re.M)}
 
 
+def conclusions(md_text):
+    """L6 — 계획서의 **결론**만 뽑는다: 표의 (행 라벨 → 값).
+
+    ★ 왜 표인가: 계획서에서 심사자가 채점하는 결론(연구기간·TRL·최종목표·KPI 목표치·연차 목표·일정)은
+      전부 표에 산다. 문장 유사도(L5)는 **표현이 닮았는지**를 재지만, 재현성이 실제로 물어야 하는 것은
+      **같은 결론에 닿았는지**다. 실측(2026-08-15): 문장 유사도를 0.80 까지 올려도 KPI 목표치는
+      4,300h / 1대 / 1대 로 갈려 있었다 — 표현은 같고 결론이 다른 문서였다.
+    """
+    out = {}
+    for block in re.findall(r"(?:^\|.*$\n?)+", md_text, re.M):
+        rows = [[c.strip() for c in ln.strip().strip("|").split("|")]
+                for ln in block.strip().split("\n")]
+        for r in rows:
+            if len(r) < 2 or set(r[0]) <= set("-: ") or not r[0]:
+                continue
+            key = re.sub(r"\s+", "", re.sub(r"\*\*|`", "", re.sub(r"\((?:[^()]*)\)", "", r[0])))
+            if len(key) < 2 or key in ("항목", "구분", "key", "성과지표"):
+                continue
+            val = " ".join(c for c in r[1:] if c.strip())
+            val = re.sub(r"\s+", " ", re.sub(r"\*\*|`", "", val)).strip()
+            if val and key not in out:
+                out[key] = val[:120]
+    return out
+
+
+def concl_equal(x, y):
+    """결론 동등성 — 숫자가 있으면 숫자 집합으로, 없으면 토큰 자카드 0.6 이상."""
+    nx = [norm_num(n) for n in re.findall(r"\d[\d,]*(?:\.\d+)?", x or "")]
+    ny = [norm_num(n) for n in re.findall(r"\d[\d,]*(?:\.\d+)?", y or "")]
+    if nx and ny:
+        sx, sy = set(nx), set(ny)
+        return len(sx & sy) / len(sx | sy) >= 0.5
+    tx = {t for t in re.split(r"[^\w가-힣]+", x or "") if len(t) > 1}
+    ty = {t for t in re.split(r"[^\w가-힣]+", y or "") if len(t) > 1}
+    if not (tx or ty):
+        return True
+    return len(tx & ty) / len(tx | ty) >= 0.6
+
+
 def measure_pair(dir_a, dir_b, proposal_prefix):
     """두 워크스페이스의 층위별 일치도를 dict 로 돌려준다(다자 비교용)."""
     A, B = read_all(dir_a), read_all(dir_b)
@@ -192,7 +231,13 @@ def measure_pair(dir_a, dir_b, proposal_prefix):
     same = [(ka, kb) for ka, kb, _ in pairs if val_equal(la[ka], lb[kb])]
     ea = set().union(*(entities(v) for v in A.values())) if A else set()
     eb = set().union(*(entities(v) for v in B.values())) if B else set()
+    ca, cb = conclusions(pa), conclusions(pb)
+    ckeys = set(ca) & set(cb)
+    csame = [k for k in ckeys if concl_equal(ca[k], cb[k])]
     return {
+        "L6": (len(csame) / len(ckeys)) if ckeys else None,
+        "L6_n": len(ckeys),
+        "L6_diff": sorted((k, ca[k][:44], cb[k][:44]) for k in ckeys - set(csame))[:12],
         "L2": jaccard(oa, ob) if (oa or ob) else None,
         "L3a": (2 * len(pairs) / (len(la) + len(lb))) if (la or lb) else None,
         "L3b": (len(same) / len(pairs)) if pairs else None,
@@ -211,22 +256,38 @@ def multi(dirs, proposal_prefix, out=None, jsonp=None):
     for (i, a), (j, b) in itertools.combinations(list(enumerate(dirs)), 2):
         m = measure_pair(a, b, proposal_prefix)
         rows.append((f"{names[i]} ↔ {names[j]}", m))
-        for k in ("L2", "L3a", "L3b", "L4", "L5"):
+        for k in ("L6", "L2", "L3a", "L3b", "L4", "L5"):
             if m[k] is not None:
                 acc[k].append(m[k])
     lines = ["# 재현성 다자 측정 (쌍별)", "",
-             "| 쌍 | L2 구조 | L3-a 지표 | L3-b 값 | L4 근거 | **L5 서술** |",
-             "|---|---:|---:|---:|---:|---:|"]
+             "> **주지표는 L6(결론 일치도)** — 표에 담긴 결론(연구기간·TRL·최종목표·KPI 목표치·연차 목표)이",
+             "> 같은지를 본다. L5(서술)는 표현이 닮았는지일 뿐이라 참고값이다.", "",
+             "| 쌍 | **L6 결론** | L2 구조 | L3-a 지표 | L3-b 값 | L4 근거 | L5 서술 |",
+             "|---|---:|---:|---:|---:|---:|---:|"]
     for name, m in rows:
         f = lambda v: "—" if v is None else f"{v:.2f}"
-        lines.append(f"| {name} | {f(m['L2'])} | {f(m['L3a'])} | {f(m['L3b'])} | {f(m['L4'])} | **{f(m['L5'])}** |")
+        lines.append(f"| {name} | **{f(m['L6'])}**({m['L6_n']}행) | {f(m['L2'])} | {f(m['L3a'])} "
+                     f"| {f(m['L3b'])} | {f(m['L4'])} | {f(m['L5'])} |")
     lines.append("")
     means = {k: (sum(v) / len(v) if v else None) for k, v in acc.items()}
     fm = lambda k: "—" if means.get(k) is None else f"{means[k]:.2f}"
-    lines += [f"**평균** — 구조 {fm('L2')} · 지표 {fm('L3a')} · 값 {fm('L3b')} · 근거 {fm('L4')} · **서술 {fm('L5')}**", ""]
+    lines += [f"**평균** — **결론 {fm('L6')}** · 구조 {fm('L2')} · 지표 {fm('L3a')} · 값 {fm('L3b')} "
+              f"· 근거 {fm('L4')} · 서술 {fm('L5')}", ""]
+    worst6 = min((m["L6"] for _, m in rows if m["L6"] is not None), default=None)
     worst = min((m["L5"] for _, m in rows if m["L5"] is not None), default=None)
-    if worst is not None:
-        lines += [f"**최저 쌍 서술 유사도 = {worst:.2f}**  (재현성은 최악 쌍으로 말한다)", ""]
+    if worst6 is not None:
+        lines += [f"**최저 쌍 결론 일치 = {worst6:.2f}** (목표 0.90) · 서술 {worst:.2f} (참고, 목표 0.65~0.75)",
+                  "", "재현성은 **최악 쌍**으로 말한다.", ""]
+    diffs = [d for _, m in rows for d in m.get("L6_diff", [])]
+    if diffs:
+        seen, uniq = set(), []
+        for k, x, y in diffs:
+            if k not in seen:
+                seen.add(k); uniq.append((k, x, y))
+        lines += ["## ★ 결론이 갈린 항목 — 재현성의 실제 구멍", "",
+                  "| 항목 | 값 A | 값 B |", "|---|---|---|"]
+        lines += [f"| {k} | {x} | {y} |" for k, x, y in uniq[:20]]
+        lines += [""]
     allc = [c for _, m in rows for c in m["conflicts"]]
     if allc:
         seen, uniq = set(), []
