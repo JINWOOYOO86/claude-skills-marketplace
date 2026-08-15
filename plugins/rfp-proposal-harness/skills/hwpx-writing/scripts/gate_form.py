@@ -21,7 +21,7 @@
 
 종료코드 0=PASS, 1=FAIL, 2=실행 오류.
 """
-import argparse, json, re, sys, zipfile
+import argparse, json, os, re, sys, zipfile
 import xml.etree.ElementTree as ET
 
 HP = "http://www.hancom.co.kr/hwpml/2011/paragraph"
@@ -172,9 +172,32 @@ KPI5 = ["단위", "기준값", "목표치", "평가방법", "평가환경"]
 
 
 def sp_kpi5(tables, text):
-    heads = norm(" ".join(" ".join(r[0]) for r in tables if r))
-    miss = [k for k in KPI5 if k not in heads and k not in norm(text)]
-    return not miss, ("5요소 전량" if not miss else f"누락 {miss}")
+    """양식 요구 5요소(단위·기준값·목표치·평가방법·평가환경)를 **KPI 표의 열**에서 확인한다.
+
+    ★ 실측(2026-08-15): 종전 구현은 「절 안 어디든 그 단어가 있으면 통과」였다. 그래서
+      평가방법·평가환경을 표 밖 산문으로 뭉뚱그린 판이 **전부 통과**했다 — 어느 지표의 방법인지
+      대응이 안 되는데도. 규율 I(「존재 검사 단독은 거짓 통과를 발급한다」)의 네 번째 재발이다.
+      → 지표별 1:1 대응을 강제하려면 **표의 열**로 봐야 한다.
+    """
+    kpi = None
+    for rows in tables:
+        if not rows:
+            continue
+        h = norm(" ".join(rows[0]))
+        if "가중치" in h and ("성과지표" in h or "지표" in h):
+            kpi = rows
+            break
+    if kpi is None:
+        heads = norm(" ".join(" ".join(r[0]) for r in tables if r))
+        miss = [k for k in KPI5 if k not in heads and k not in norm(text)]
+        return (not miss), (f"KPI 표 미검출 — 절 텍스트로만 확인{'' if not miss else f' · 누락 {miss}'}")
+    head = norm(" ".join(kpi[0]))
+    miss = [k for k in KPI5 if k not in head]
+    if not miss:
+        return True, f"5요소 전량이 표의 열 ({len(kpi[0])}열)"
+    intext = [k for k in miss if k in norm(text)]
+    return False, (f"표의 열에 없음: {miss}"
+                   + (f" (표 밖 산문에는 있으나 지표별 1:1 대응 불가: {intext})" if intext else ""))
 
 
 SUM_ROW = re.compile(r"\s*(계|합계|총계|소계)\s*")
@@ -213,17 +236,57 @@ def sp_table_c(tables):
     return False, f"연차/내용/방법/근거 4열 표 없음 (실측 {shapes})"
 
 
-def sp_table_c_ledger(tables, spec):
-    """F-12 — [표 C] 의 `근거` 열은 **확정 수치 대장의 key**, 셀은 자수 상한 이내.
+LEDGER_KEY = re.compile(r"[A-Z]{3,4}_[A-Z0-9_]{2,}")
+
+
+def ledger_sources(ws):
+    """워크스페이스의 조사 산출물에서 「확정 수치 대장」의 **출처 열**을 읽어 식별 토큰 사전을 만든다.
+
+    대장 스키마: `| key | 값 | 단위 | 기준연도 | 출처(계층) | 확신도 |`
+    반환: 출처 문자열에서 뽑은 토큰 집합(기관·문서·번호 — 예 NIST, arXiv, 2509.19588, KISTEP).
+    """
+    toks = set()
+    if not ws or not os.path.isdir(ws):
+        return toks
+    for fn in sorted(os.listdir(ws)):
+        if not fn.endswith(".md"):
+            continue
+        try:
+            txt = open(os.path.join(ws, fn), encoding="utf-8").read()
+        except Exception:
+            continue
+        grab = False
+        for line in txt.split("\n"):
+            if re.match(r"^#{1,4}\s*.*확정\s*\S*\s*대장", line):
+                grab = True
+                continue
+            if grab and re.match(r"^#{1,4}\s", line):
+                grab = False
+            if not (grab and line.strip().startswith("|")):
+                continue
+            cells = [c.strip() for c in line.strip().strip("|").split("|")]
+            if len(cells) < 5:
+                continue
+            for t in re.findall(r"[A-Za-z][A-Za-z0-9.\-]{2,}|[가-힣]{2,}", cells[4]):
+                if not LEDGER_KEY.fullmatch(t):
+                    toks.add(t)
+    return toks
+
+
+def sp_table_c_ledger(tables, spec, ws=None):
+    """F-12 — 연차별 연구내용 표의 `근거` 열은 **대장이 지정한 출처명**, 셀은 자수 상한 이내.
 
     ★ 실측(2026-08-15, c1↔c2): 같은 근거팩을 동결해 줬는데도 이 열이 한쪽은 특허공보·물성
       라이브러리, 다른 쪽은 arXiv·업계지로 갈렸다. 근거 개체 일치도가 0.67 에 묶인 주범이고,
-      결론 일치도(L6)를 깎는 7행 중 4행이 이 표였다. **무엇을 인용할지 자유로우면 갈린다** —
-      대장 key 로 적게 하면 인용은 대장이 정하고 표는 그 포인터만 갖는다.
-    ★ 셀 자수도 함께 잡는다. 한쪽이 90자, 다른 쪽이 300자로 쓰면 같은 결론도 다른 문서가 된다.
+      결론 일치도(L6)를 깎는 7행 중 4행이 이 표였다. **무엇을 인용할지 자유로우면 갈린다.**
+    ★★ 그래서 처음에는 「대장 key 를 적어라」로 고정했는데 **그게 더 나빴다**(실측 2026-08-15, c3):
+      게이트는 통과했지만 심사자가 읽는 표의 근거 열에 `TECH_SOTA_METRIC`·`PAT_WHITE_SPACE` 같은
+      **내부 변수명이 그대로 인쇄**됐다. 인용을 고정하는 것과 내부 식별자를 인쇄하는 것은 다른 문제다.
+      → 지금은 **대장의 「출처」 열에 실재하는 표기**를 요구하고, key 원문은 **금칙**으로 잡는다.
+      워크스페이스를 주면(`--ledger`) 대장과 대조하고, 없으면 금칙·자수만 보고 그 사실을 밝힌다.
     """
     lim = int((spec.get("limits") or {}).get("table_cell_chars") or 0)
-    keyre = re.compile(r"[A-Z]{3,4}_[A-Z0-9_]+")
+    src = ledger_sources(ws)
     for rows in tables:
         if not rows or len(rows[0]) < 4:
             continue
@@ -232,17 +295,29 @@ def sp_table_c_ledger(tables, spec):
             continue
         body = rows[1:]
         if not body:
-            return False, "[표 C] 본문 행 없음"
-        bad_key = [r[0] for r in body if not keyre.search(r[-1])]
-        over = [(r[0], len(c)) for r in body for c in r if lim and len(c) > lim]
+            return False, "연차별 연구내용 표: 본문 행 없음"
         det = []
-        if bad_key:
-            det.append(f"근거 열이 대장 key 가 아님: {', '.join(bad_key[:4])}")
+        leaked = [r[0] for r in body if LEDGER_KEY.search(r[-1])]
+        if leaked:
+            det.append("근거 열에 대장 key 원문이 인쇄됨(출처명으로 바꿀 것): " + ", ".join(leaked[:4]))
+        empty = [r[0] for r in body if len(r[-1].strip()) < 4]
+        if empty:
+            det.append("근거 열이 비었거나 너무 짧음: " + ", ".join(empty[:4]))
+        unknown = []
+        if src:
+            for r in body:
+                cell = r[-1]
+                if not any(t in cell for t in src):
+                    unknown.append(r[0])
+            if unknown:
+                det.append("대장 출처에 없는 근거: " + ", ".join(unknown[:4]))
+        over = [(r[0], len(c)) for r in body for c in r if lim and len(c) > lim]
         if over:
             det.append(f"셀 자수 초과({lim}자): " + ", ".join(f"{n} {L}자" for n, L in over[:4]))
-        return (not det), ("; ".join(det) if det
-                           else f"근거 열 대장 key {len(body)}행 · 셀 자수 {lim}자 이내")
-    return True, "[표 C] 없음 — TABLE_C 검사에서 이미 잡힌다"
+        tail = (f"근거 열 {len(body)}행 대장 출처와 일치 · 셀 {lim}자 이내"
+                if src else f"근거 열 {len(body)}행 — key 원문 0건·셀 {lim}자 이내 (대장 대조 미실시: --ledger 미지정)")
+        return (not det), ("; ".join(det) if det else tail)
+    return True, "연차별 연구내용 표 없음 — TABLE_C 검사에서 이미 잡힌다"
 
 
 def sp_fig_or_table(doc, sid):
@@ -412,6 +487,7 @@ def main():
     ap.add_argument("--hwpx", required=True)
     ap.add_argument("--md", help="조립용 원고(.build.md) — F-2·F-7 측정 매체")
     ap.add_argument("--spec", required=True)
+    ap.add_argument("--ledger", help="워크스페이스 경로 — 조사 산출물의 「확정 수치 대장」 출처와 대조(F-12)")
     ap.add_argument("--json")
     a = ap.parse_args()
 
@@ -486,7 +562,7 @@ def main():
             elif sp == "TABLE_C":
                 ok, d = sp_table_c(tb)
             elif sp == "TABLE_C_LEDGER":
-                ok, d = sp_table_c_ledger(tb, spec)
+                ok, d = sp_table_c_ledger(tb, spec, a.ledger)
             elif sp == "TABLE_B":
                 ok, d = sp_table_b(tb)
             elif sp == "KPI5":
@@ -520,6 +596,20 @@ def main():
         md_hits = [p for p in ("<!--", "FORM-GUIDE") if p in md]
         check("F-5b 가이드 주석 잔존 0", not md_hits,
               "0건" if not md_hits else f"{md_hits} — form_strip.py 를 돌리지 않았다", "md")
+
+    # F-13 내부 식별자 잔존 0 ------------------------------------------------------
+    # ★ 실측(2026-08-15, 3회 실행): 대장 key(`TECH_SOTA_METRIC`)·축 이름(`(축 A 판정)`)·
+    #   `확정 수치 대장` 이 **출처 자리**에 인쇄됐다. 심사자에게는 아무 의미가 없는 문자열이며,
+    #   근거를 밝혀야 할 칸을 자기 참조가 차지한 상태다. 게이트 어느 항목도 이걸 보지 않았다.
+    jar = []
+    for pat in spec.get("internal_jargon_patterns", []):
+        for m in re.finditer(pat, body):
+            jar.append(m.group(0))
+    if spec.get("internal_jargon_patterns"):
+        uniq = sorted(set(jar))
+        check("F-13 내부 식별자 잔존 0", not jar,
+              "0건" if not jar else f"{len(jar)}건 {uniq[:5]} — 대장 key 는 내부 포인터다. 문서에는 그 key 가 가리키는 **출처명**을 쓴다",
+              "hwpx")
 
     # F-6 표·그림 상한 -----------------------------------------------------------
     lim = spec.get("limits", {})
