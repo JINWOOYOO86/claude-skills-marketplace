@@ -170,6 +170,45 @@ def page_check(raw, paper="A4", want_portrait=True):
     return (wm, hm, ORIENT.get(ls, ls), bad)
 
 
+def table_width_check(raw):
+    """J-17 표 폭 ↔ 본문 문단 폭 정합성.
+
+    ★ 실측 사고(2026-08-15): 조립 도구가 **자기 프리셋 여백**(좌우 5,669)으로 표를 만들고,
+    우리 조립은 그 뒤에 여백을 **양식값**(좌우 8,504)으로 패치한다. 표는 그대로 남아
+    본문 폭 **42,519** 인 문서에 **46,389** 짜리 표가 들어갔다 — 오른쪽 여백을 **13.6mm 침범**한다.
+    파일은 열리고 `validate` 도 통과하며 다른 J 항목도 전부 PASS 였다. **인쇄해야 보이는 결함**이다.
+
+    표는 `treatAsChar="1"`(글자처럼 취급)이라 **바깥 좌·우 여백이 폭에 더해진다** — 점유폭으로 본다.
+    반환: (본문 폭, [문제 문자열]).
+    """
+    p = re.search(r"<hp:pagePr\b[^>]*>", raw)
+    m = re.search(r"<hp:margin\b[^>]*/?>", raw)
+    if not (p and m):
+        return (None, [])                     # 구 파이프라인 산출물 — J-16 이 따로 잡는다
+    def att(tag, k):
+        mm = re.search(rf'{k}="(\d+)"', tag)
+        return int(mm.group(1)) if mm else 0
+    text = att(p.group(0), "width") - att(m.group(0), "left") - att(m.group(0), "right") \
+        - att(m.group(0), "gutter")
+    bad, depth, start = [], 0, None
+    for mt in re.finditer(r"<hp:tbl\b|</hp:tbl>", raw):
+        if mt.group(0) == "</hp:tbl>":
+            depth -= 1
+            if depth == 0:
+                spans = raw[start:mt.end()]
+                w = re.search(r'<hp:sz width="(\d+)"', spans)
+                om = re.search(r'<hp:outMargin\b[^>]*left="(\d+)"[^>]*right="(\d+)"', spans)
+                occ = (int(w.group(1)) if w else 0) + \
+                      ((int(om.group(1)) + int(om.group(2))) if om else 0)
+                if occ != text:
+                    bad.append(f"표{len(bad)+1} 점유 {occ} ≠ 본문 {text} ({occ-text:+d})")
+        else:
+            if depth == 0:
+                start = mt.start()
+            depth += 1
+    return (text, bad)
+
+
 def emphasis_check(parts, md_path):
     """J-14 강조(굵기) 소실 — 「존재는 있고 구조가 깨진」 결함 계보의 4번째 사례.
 
@@ -382,6 +421,17 @@ def main():
     check(f"J-16 용지 규격·방향({a.paper})", not pbad,
           "; ".join(pbad) if pbad else
           f"{wm:.0f}×{hm:.0f}mm · {ls}")
+
+    # J-17 표 폭 ↔ 본문 문단 폭 — 여백 패치 뒤 표를 다시 재단했는지 본다
+    tw, twbad = table_width_check(raw)
+    if tw is None:
+        print("  INFO  hp:pagePr 미검출 — J-17 표 폭 대조 생략(구 파이프라인 산출물)")
+    elif not shapes:
+        print("  INFO  표 0개 — J-17 생략")
+    else:
+        check("J-17 표 폭 ↔ 본문 문단 폭", not twbad,
+              "; ".join(twbad[:3]) + (f" 외 {len(twbad)-3}건" if len(twbad) > 3 else "")
+              if twbad else f"표 {len(shapes)}개 전량 {tw} 일치 ({tw/283.465:.0f}mm)")
 
     ok = not fails
     print(f"\n{'='*60}\n{'PASS' if ok else 'FAIL'} — 실패 {len(fails)}건")
