@@ -213,6 +213,38 @@ def sp_table_c(tables):
     return False, f"연차/내용/방법/근거 4열 표 없음 (실측 {shapes})"
 
 
+def sp_table_c_ledger(tables, spec):
+    """F-12 — [표 C] 의 `근거` 열은 **확정 수치 대장의 key**, 셀은 자수 상한 이내.
+
+    ★ 실측(2026-08-15, c1↔c2): 같은 근거팩을 동결해 줬는데도 이 열이 한쪽은 특허공보·물성
+      라이브러리, 다른 쪽은 arXiv·업계지로 갈렸다. 근거 개체 일치도가 0.67 에 묶인 주범이고,
+      결론 일치도(L6)를 깎는 7행 중 4행이 이 표였다. **무엇을 인용할지 자유로우면 갈린다** —
+      대장 key 로 적게 하면 인용은 대장이 정하고 표는 그 포인터만 갖는다.
+    ★ 셀 자수도 함께 잡는다. 한쪽이 90자, 다른 쪽이 300자로 쓰면 같은 결론도 다른 문서가 된다.
+    """
+    lim = int((spec.get("limits") or {}).get("table_cell_chars") or 0)
+    keyre = re.compile(r"[A-Z]{3,4}_[A-Z0-9_]+")
+    for rows in tables:
+        if not rows or len(rows[0]) < 4:
+            continue
+        head = norm(" ".join(rows[0]))
+        if not ("연차" in head and "내용" in head and "방법" in head):
+            continue
+        body = rows[1:]
+        if not body:
+            return False, "[표 C] 본문 행 없음"
+        bad_key = [r[0] for r in body if not keyre.search(r[-1])]
+        over = [(r[0], len(c)) for r in body for c in r if lim and len(c) > lim]
+        det = []
+        if bad_key:
+            det.append(f"근거 열이 대장 key 가 아님: {', '.join(bad_key[:4])}")
+        if over:
+            det.append(f"셀 자수 초과({lim}자): " + ", ".join(f"{n} {L}자" for n, L in over[:4]))
+        return (not det), ("; ".join(det) if det
+                           else f"근거 열 대장 key {len(body)}행 · 셀 자수 {lim}자 이내")
+    return True, "[표 C] 없음 — TABLE_C 검사에서 이미 잡힌다"
+
+
 def sp_fig_or_table(doc, sid):
     s = doc.sections.get(sid, {})
     n_t, n_p = len(s.get("tables", [])), s.get("pics", 0)
@@ -453,6 +485,8 @@ def main():
                 ok, d = sp_table_a(tb)
             elif sp == "TABLE_C":
                 ok, d = sp_table_c(tb)
+            elif sp == "TABLE_C_LEDGER":
+                ok, d = sp_table_c_ledger(tb, spec)
             elif sp == "TABLE_B":
                 ok, d = sp_table_b(tb)
             elif sp == "KPI5":

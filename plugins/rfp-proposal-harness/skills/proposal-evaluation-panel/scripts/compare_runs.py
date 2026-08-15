@@ -194,33 +194,61 @@ def conclusions(md_text):
             val = " ".join(c for c in r[1:] if c.strip())
             val = re.sub(r"\s+", " ", re.sub(r"\*\*|`", "", val)).strip()
             if val and key not in out:
-                out[key] = val[:120]
+                out[key] = val[:200]
     return out
 
 
-def concl_equal(x, y):
-    """결론 동등성 — 숫자가 있으면 숫자 집합으로, 없으면 토큰 자카드 0.6 이상."""
-    nx = [norm_num(n) for n in re.findall(r"\d[\d,]*(?:\.\d+)?", x or "")]
-    ny = [norm_num(n) for n in re.findall(r"\d[\d,]*(?:\.\d+)?", y or "")]
+def concl_equal(x, y, strict=False):
+    """결론 동등성.
+
+    ★ 기본은 **짧은 쪽 기준 포함율**(overlap coefficient)이다. 자카드로 재면 한쪽이 더 자세히
+      쓴 것만으로 불일치가 된다 — 실측(2026-08-15, c1↔c2): 갈렸다고 잡힌 9행이 전부
+      「같은 결론을 길게/짧게 쓴 것」이었다. 핵심어 행은 국문 5개가 **완전히 같은데** 한쪽이
+      영문을 덧붙였다는 이유로 불일치로 세어졌다. 그건 재현성 결함이 아니라 문체 차이다.
+    ★ 그래도 **숫자는 먼저 본다**. 숫자가 어긋나면 아무리 문장이 겹쳐도 다른 결론이다
+      (TRL `3→6` ↔ `4→7`, 실증 `4,300h` ↔ `1대` 는 여전히 불일치로 잡힌다).
+    `strict=True` 면 종전 자카드 기준 — 문체까지 수렴했는지 보는 참고 지표.
+    """
+    ov = (lambda s, t: len(s & t) / min(len(s), len(t)))
+    nx = {norm_num(n) for n in re.findall(r"\d[\d,]*(?:\.\d+)?", x or "")}
+    ny = {norm_num(n) for n in re.findall(r"\d[\d,]*(?:\.\d+)?", y or "")}
     if nx and ny:
-        sx, sy = set(nx), set(ny)
-        return len(sx & sy) / len(sx | sy) >= 0.5
+        num_ok = (len(nx & ny) / len(nx | ny) >= 0.5) if strict else (ov(nx, ny) >= 0.6)
+        if not num_ok:
+            return False
+        if strict:
+            return True
     tx = {t for t in re.split(r"[^\w가-힣]+", x or "") if len(t) > 1}
     ty = {t for t in re.split(r"[^\w가-힣]+", y or "") if len(t) > 1}
-    if not (tx or ty):
+    if not (tx and ty):
         return True
-    return len(tx & ty) / len(tx | ty) >= 0.6
+    return (len(tx & ty) / len(tx | ty) >= 0.6) if strict else (ov(tx, ty) >= 0.6)
+
+
+def body_text(files, proposal_prefix):
+    """계획서 **본문**만 이어 붙인다.
+
+    ★ 두 가지를 걸러낸다 — 둘 다 실측으로 점수를 왜곡했다.
+      ⑴ `manifest`·`_prev`·`_v3` 같은 부속 파일 → 문서 구조(L2)가 거짓으로 낮아진다.
+      ⑵ `<접두어>.md` 와 `<접두어>.build.md` 가 함께 있으면 **build 만** 쓴다.
+         원고에는 양식 설명 주석(FORM-GUIDE)이 남아 있고 지우는 실행과 남기는 실행이
+         갈린다. c1↔c2 실측에서 `FORM`·`GUIDE`·`11pt`·`160%` 가 「한쪽에만 나온 근거」로
+         잡혔다 — 제출물에 없는 글자가 재현성 점수를 깎고 있었다.
+    """
+    ks = [k for k in files if k.startswith(proposal_prefix)
+          and not re.search(r"manifest|prev|_v\d", k)]
+    built = {k[:-len(".build.md")] for k in ks if k.endswith(".build.md")}
+    ks = [k for k in ks
+          if not (k.endswith(".md") and not k.endswith(".build.md") and k[:-len(".md")] in built)]
+    return "\n".join(files[k] for k in sorted(ks))
 
 
 def measure_pair(dir_a, dir_b, proposal_prefix):
     """두 워크스페이스의 층위별 일치도를 dict 로 돌려준다(다자 비교용)."""
     A, B = read_all(dir_a), read_all(dir_b)
 
-    def is_body(k):
-        return k.startswith(proposal_prefix) and not re.search(r"manifest|prev|_v\d", k)
-
-    pa = "\n".join(v for k, v in A.items() if is_body(k))
-    pb = "\n".join(v for k, v in B.items() if is_body(k))
+    pa = body_text(A, proposal_prefix)
+    pb = body_text(B, proposal_prefix)
     oa, ob = outline(pa), outline(pb)
     la, lb = {}, {}
     for v in A.values():
@@ -229,20 +257,24 @@ def measure_pair(dir_a, dir_b, proposal_prefix):
         lb.update(ledger(v))
     pairs = match_keys(la, lb)
     same = [(ka, kb) for ka, kb, _ in pairs if val_equal(la[ka], lb[kb])]
-    ea = set().union(*(entities(v) for v in A.values())) if A else set()
-    eb = set().union(*(entities(v) for v in B.values())) if B else set()
+    # ★ 근거 개체도 **계획서 본문**에서만 센다. 워크스페이스 전체를 세면 동결 근거팩
+    #   사본(양쪽이 똑같은 파일)이 분모를 채워 L4 가 저절로 0.9 대가 된다 —
+    #   측정하려는 것은 「같은 팩을 복사했는가」가 아니라 「무엇을 인용했는가」다.
+    ea, eb = entities(pa), entities(pb)
     ca, cb = conclusions(pa), conclusions(pb)
     ckeys = set(ca) & set(cb)
     csame = [k for k in ckeys if concl_equal(ca[k], cb[k])]
+    cstrict = [k for k in ckeys if concl_equal(ca[k], cb[k], strict=True)]
     return {
         "L6": (len(csame) / len(ckeys)) if ckeys else None,
+        "L6s": (len(cstrict) / len(ckeys)) if ckeys else None,
         "L6_n": len(ckeys),
         "L6_diff": sorted((k, ca[k][:44], cb[k][:44]) for k in ckeys - set(csame))[:12],
         "L2": jaccard(oa, ob) if (oa or ob) else None,
         "L3a": (2 * len(pairs) / (len(la) + len(lb))) if (la or lb) else None,
         "L3b": (len(same) / len(pairs)) if pairs else None,
         "L4": jaccard(ea, eb),
-        "L5": cosine3(pa, pb) if (pa and pb) else cosine3("\n".join(A.values()), "\n".join(B.values())),
+        "L5": cosine3(pa, pb) if (pa and pb) else None,
         "conflicts": [(f"{ka} ↔ {kb}", la[ka], lb[kb]) for ka, kb, _ in pairs
                       if not val_equal(la[ka], lb[kb])],
     }
@@ -334,12 +366,7 @@ def main():
     L.append(("L1 산출 구성", l1, f"공통 {len(fa & fb)} / A만 {sorted(fa - fb)} / B만 {sorted(fb - fa)}"))
 
     # L2 문서 구조 ------------------------------------------------------------
-    # ★ 접두어만 보면 `30_proposal_manifest.md`·`_prev` 같은 부속 파일이 딸려 들어와
-    #   L2(문서 구조)가 거짓으로 낮아진다. 계획서 본문만 고른다.
-    def is_body(k):
-        return k.startswith(a.proposal) and not re.search(r"manifest|prev|_v\d", k)
-    pa = "\n".join(v for k, v in A.items() if is_body(k))
-    pb = "\n".join(v for k, v in B.items() if is_body(k))
+    pa, pb = body_text(A, a.proposal), body_text(B, a.proposal)
     oa, ob = outline(pa), outline(pb)
     l2 = jaccard(oa, ob) if (oa or ob) else None
     L.append(("L2 문서 구조(장·절)", l2,
@@ -366,14 +393,27 @@ def main():
               f"일치 {len(same)} / 충돌 {len(conflict)}" if pairs else "짝지어진 주제 없음"))
 
     # L4 근거 개체 ------------------------------------------------------------
-    ea = set().union(*(entities(v) for v in A.values())) if A else set()
-    eb = set().union(*(entities(v) for v in B.values())) if B else set()
+    # ★ 계획서 본문에서만 센다(근거팩 사본이 분모를 채우지 않도록) — measure_pair 와 동일 규칙
+    ea, eb = entities(pa), entities(pb)
     l4 = jaccard(ea, eb)
     L.append(("L4 근거 개체", l4, f"A {len(ea)} · B {len(eb)} · 공통 {len(ea & eb)}"))
 
     # L5 서술 유사도 ----------------------------------------------------------
-    l5 = cosine3("\n".join(A.values()), "\n".join(B.values()))
+    l5 = cosine3(pa, pb) if (pa and pb) else None
     L.append(("L5 서술 유사도(3-gram)", l5, "표현 차이는 허용 — 참고값"))
+
+    # ★ L6 결론 일치도 — 주지표. 표에 담긴 결론(기간·TRL·목표치)이 실제로 같은가.
+    ca, cb = conclusions(pa), conclusions(pb)
+    ckeys = set(ca) & set(cb)
+    csame = [k for k in ckeys if concl_equal(ca[k], cb[k])]
+    cstrict = [k for k in ckeys if concl_equal(ca[k], cb[k], strict=True)]
+    cdiff = sorted((k, ca[k], cb[k]) for k in ckeys - set(csame))
+    l6 = (len(csame) / len(ckeys)) if ckeys else None
+    l6s = (len(cstrict) / len(ckeys)) if ckeys else None
+    L.insert(0, ("★ L6 결론 일치도", l6,
+                 f"공통 결론 {len(ckeys)}행 중 {len(csame)}행 일치" if ckeys else "결론 표 없음"))
+    L.insert(1, ("L6s 결론 문체까지 일치", l6s,
+                 f"{len(cstrict)}행 (자카드 기준 · 참고값)" if ckeys else "—"))
 
     # 종합: 핵심 3층(L2·L3-b·L4)의 가중 평균
     core = [x for x in (l2, l3_val, l4) if x is not None]
@@ -384,7 +424,15 @@ def main():
              "## 층위별 일치도", "", "| 층위 | 일치도 | 상세 |", "|---|---:|---|"]
     for name, val, det in L:
         lines.append(f"| {name} | {'—' if val is None else f'{val:.2f}'} | {det} |")
-    lines += ["", f"**종합 재현성(L2·L3-b·L4 평균) = {overall:.2f}**", ""]
+    lines += ["", f"**종합 재현성(L2·L3-b·L4 평균) = {overall:.2f}**",
+              "", "> 주지표는 **L6** 이다. 문장이 닮아도(L5) 결론이 갈리면 다른 계획서다.", ""]
+
+    if cdiff:
+        lines += ["## ★ 결론이 갈린 행 — L6 를 깎는 지점", "",
+                  "| 결론 항목 | 실행 A | 실행 B |", "|---|---|---|"]
+        lines += [f"| {k} | {x} | {y} |" for k, x, y in cdiff[:30]]
+        lines += ["", "> 여기 남은 항목이 **다음 고정 대상**이다 — 대장 key 로 끌어올리거나",
+                  "> 골격 슬롯에 결선하면 사라진다.", ""]
 
     if conflict:
         lines += ["## ★ 값이 갈린 지표 — 재현성을 깨는 지점", "",
@@ -407,7 +455,7 @@ def main():
         print(f"\n보고서: {a.out}")
     if a.json:
         json.dump({"levels": [{"name": n, "score": v, "detail": d} for n, v, d in L],
-                   "overall": overall, "conflicts": conflict,
+                   "overall": overall, "conflicts": conflict, "concl_diff": cdiff,
                    "only_a": sorted(ea - eb), "only_b": sorted(eb - ea)},
                   open(a.json, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
         print(f"JSON: {a.json}")
