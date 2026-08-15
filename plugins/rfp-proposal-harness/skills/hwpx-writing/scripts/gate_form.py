@@ -445,7 +445,10 @@ def main():
             if sp == "CLASS3":
                 ok, d = sp_class3(tx)
             elif sp == "KEYWORDS5":
-                ok, d = sp_keywords5(tx)
+                # ★ 실측: 본문 리드에 「핵심어」가 들어가면 그 문장을 세어 **거짓 통과**가 났다.
+                #   핵심어는 0장 요약표의 항목이므로 **표 셀에서 먼저** 찾는다.
+                tbl_text = " ".join(c for rows in tb for r in rows for c in r)
+                ok, d = sp_keywords5(tbl_text if "핵심어" in tbl_text else tx)
             elif sp == "TABLE_A":
                 ok, d = sp_table_a(tb)
             elif sp == "TABLE_C":
