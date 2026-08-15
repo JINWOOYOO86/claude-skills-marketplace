@@ -23,6 +23,11 @@
 """
 import argparse, json, os, re, subprocess, sys, tempfile
 
+# ★ 「규격 조판 회차를 한 번도 못 얻었다」는 표시. 이 note 가 붙은 FAIL 은 **문서 결함이 아닐 수 있다**
+#   — 최악값으로 판정한 결과이므로, 한글 인스턴스를 정리하고 재측정한 뒤에 감축을 결정한다.
+#   실측(2026-08-15): 같은 파일이 22.78pt 조판만 나와 13p FAIL → 재측정에서 17.5pt 를 얻어 9p PASS.
+SUSPECT_MARK = "규격 줄간격"
+
 PS_TEMPLATE = r"""
 param([string]$src, [string]$dst)
 $ErrorActionPreference = "Stop"
@@ -192,7 +197,7 @@ def measure_worst(hwpx, chapters, winpython, repeat, spec=None):
     totals = sorted({r[0] for r in runs})
     note = ""
     if want_gap:
-        note = (f"⚠️ 규격 줄간격({want_gap:.1f}pt)으로 조판된 회차 없음 — 실측 {gaps} pt. "
+        note = (f"⚠️ {SUSPECT_MARK}({want_gap:.1f}pt)으로 조판된 회차 없음 — 실측 {gaps} pt. "
                 "한글의 「글꼴에 어울리는 줄 높이」 설정이 문서 지정을 덮어쓴 상태이며, "
                 f"최악값 {best[0]}p 로 판정했다. ")
     elif len(totals) > 1:
@@ -318,17 +323,24 @@ def main():
         print("  장별 배분 미측정 — 총량만 판정한다")
 
     ok = not fails
+    # ★ 규격 조판 회차를 못 얻은 채 난 FAIL 은 **측정을 먼저 의심한다**(2026-08-15 실측: 13p FAIL → 재측정 9p PASS).
+    suspect = bool(note) and SUSPECT_MARK in note
     print(f"\n{'='*60}\n{'PASS' if ok else 'FAIL'} — 위반 {len(fails)}건"
           + (f" · 경고 {len(warns)}건" if warns else ""))
     for f in fails:
         print(f"  - {f}")
     for w in warns:
         print(f"  ~ {w}")
+    if not ok and suspect:
+        print("\n⚠️ 먼저 재측정하라 — 규격 줄간격 회차를 한 번도 못 얻은 상태의 FAIL 이다."
+              "\n   한글(Hwp) 프로세스를 모두 닫고 같은 명령을 다시 돌린다. 그래도 같은 note 가 나오면 그때 감축한다."
+              "\n   실측(2026-08-15): 동일 파일이 22.78pt 조판만 나와 13p FAIL → 재측정에서 17.5pt·9p PASS.")
     if not ok:
         print("\n감축 순서(실측): ① 7열 이상 표의 열 축소·각주 이관 → ② 표 개수 통합 →"
               " ③ 그림 축소 → ④ 산문. 행을 줄이는 것은 효과가 가장 작다.")
     if a.json:
-        json.dump({"pass": ok, "total": total, "budget": pb, "chapters": rows,
+        json.dump({"pass": ok, "total": total, "measurement_suspect": suspect,
+                   "budget": pb, "chapters": rows,
                    "fails": fails, "warns": warns, "note": note},
                   open(a.json, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
         print(f"결과 JSON: {a.json}")
