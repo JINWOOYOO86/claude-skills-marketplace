@@ -100,6 +100,11 @@ for it in zin.infolist():
 zout.close()
 PY
 
+# 4.5) 표 폭을 본문 문단 폭에 맞춘다 — 4단계에서 여백을 양식값으로 바꿨으므로 표도 다시 재단해야 한다.
+#      조립 도구는 **자기 프리셋 여백**(좌우 5,669)으로 표를 만들어 놓는다. 이 단계를 빼면
+#      본문 폭 42,519 문서에 46,389 짜리 표가 남아 오른쪽 여백을 13.6mm 침범한다(실측).
+python3 "$S/hwpx-writing/scripts/fix_table_width.py" --hwpx 30_proposal.hwpx
+
 # 5) 게이트 — 하나가 FAIL 해도 나머지를 다 돌려 전모를 본다
 set +e; RC=0
 npx -y kordoc@^4 validate 30_proposal.hwpx
