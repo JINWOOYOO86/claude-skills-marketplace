@@ -26,6 +26,9 @@ def build(spec):
     out.append("[배분] " + " / ".join(f"{k}장 {v}p" for k, v in ch_budget.items()))
     out.append(f"[상한] 산문 {lim.get('prose_chars','?')}자 · 표 {lim.get('tables','?')}개"
                f"(열 {lim.get('table_cols_max','?')} 이하) · 그림 {lim.get('figures','?')}장")
+    if (spec.get("writing_style") or {}).get("slot_max_chars"):
+        out.append(f"[슬롯] 각 ㅇ 문장은 `슬롯 문구 — 값(출처)` 형태로 "
+                   f"**{spec['writing_style']['slot_max_chars']}자 이내**. 슬롯을 늘리거나 순서를 바꾸지 않는다.")
     ws = spec.get("writing_style") or {}
     if ws.get("mode"):
         out.append(f"[서술] **{ws['mode']}** — 마크다운 중첩 목록으로 쓰면 조립 도구가 "
@@ -72,6 +75,8 @@ def build(spec):
                     out.append("  - (근거·수치·출처 — 확정 수치 대장에서만 인용)")
                     continue
                 out.append(f"- **{item['lead']}** — (한 줄 결론)")
+                if item.get("table"):
+                    out.append(f"  - ※ {item['table']}")
                 for sl in item.get("slots", []):
                     key = sl.get("key")
                     tail = f"(대장 `{key}` 값 인용)" if key else "(근거·수치·출처)"
