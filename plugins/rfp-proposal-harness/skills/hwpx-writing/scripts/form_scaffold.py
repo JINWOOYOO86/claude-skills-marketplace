@@ -72,14 +72,17 @@ def build(spec):
             for item in bp:
                 if isinstance(item, str):
                     out.append(f"- **{item}** — (한 줄 결론)")
-                    out.append("  - (근거·수치·출처 — 확정 수치 대장에서만 인용)")
+                    out.append("  - (근거·수치·출처 — 확정 수치 대장에서만 인용하고, 이 괄호는 지운다)")
                     continue
                 out.append(f"- **{item['lead']}** — (한 줄 결론)")
                 if item.get("table"):
                     out.append(f"  - ※ {item['table']}")
                 for sl in item.get("slots", []):
                     key = sl.get("key")
-                    tail = f"(대장 `{key}` 값 인용)" if key else "(근거·수치·출처)"
+                    # ★ key 는 **내부 포인터**다 — 원고에 그대로 남으면 심사자가 읽는 문서에
+                    #   내부 변수명이 인쇄된다(실측 2026-08-15). 괄호째 지우도록 지시를 붙인다.
+                    tail = (f"(← 대장 `{key}` 의 **값·출처로 바꿔 쓰고 이 괄호는 지운다**)"
+                            if key else "(근거·수치·출처 — 이 괄호는 지운다)")
                     out.append(f"  - {sl['text']} — {tail}")
             out.append("")
         elif node["level"] == 3 and (spec.get("writing_style") or {}).get("mode") == "개조식":
