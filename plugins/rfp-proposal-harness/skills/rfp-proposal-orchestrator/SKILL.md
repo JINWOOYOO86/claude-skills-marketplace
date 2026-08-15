@@ -58,6 +58,23 @@ Phase 4  평가위원단 6인 병렬채점 → 위원장 종합 → REVISE면 �
 3. 시장 축 완료 후 `Agent(subagent_type=researcher, prompt="축: 특허")` 실행(기업 목록 사용) → `14_patent.md`.
    - 시장조사가 지연되면 특허는 키워드만으로 시작하되 기업 축 생략을 표시.
 
+## Phase 2.5: 근거팩 동결 (재현이 목적일 때 — 경진대회·시연)
+
+조사가 끝나면 **그 상태를 얼어붙인다.** 이후 작성·개정은 팩만 본다(웹 재검색 금지).
+
+```bash
+mkdir -p _workspace/<과제>/evidence_pack
+cp _workspace/<과제>/1?_*.md _workspace/<과제>/evidence_pack/
+sha256sum _workspace/<과제>/evidence_pack/*.md > _workspace/<과제>/evidence_pack/PACK.sha256
+```
+
+- 계획서 매니페스트에 **팩 해시**를 적는다 — 어떤 근거로 쓴 문서인지 나중에 증명할 수 있어야 한다.
+- 갱신은 **명시적 사건**(규제 개정·정기 갱신)일 때만 하고, 이전 팩과의 **값 diff 를 남긴다**.
+- ⚠️ **최신 근거가 목적이면 동결하지 않는다**(실제 공고 대응·제출용). 그때는 재현성 목표를 낮춰 잡는다.
+
+근거: 완전 독립 실행(매번 웹 재조사)의 계획서 결론 일치도는 **0.55**, 서술 유사도는 **0.60** 이 상한이었다.
+팩을 동결하면 조사 변동이 사라져 작성 규율만 남는다.
+
 ## Phase 3: 작성
 1. `figure-designer` 실행(조사 결과 기반) → `20_figures/`.
 2. `hwpx-writer` 실행 → `30_proposal.hwpx`/`30_proposal.md` + `30_proposal_manifest.md`.
