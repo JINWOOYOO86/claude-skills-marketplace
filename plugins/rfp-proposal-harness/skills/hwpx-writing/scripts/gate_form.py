@@ -219,6 +219,39 @@ def sp_fig_or_table(doc, sid):
     return (n_t + n_p) > 0, f"표 {n_t}개 · 그림 {n_p}장"
 
 
+def blueprint_check(md_text, spec):
+    """F-11 골격 준수 — □ 리드·ㅇ 슬롯의 **문구·순서·개수**를 명세와 축자 대조.
+
+    ★ 실측(2026-08-15): 골격을 지시로만 주면 실행마다 항목이 늘거나 준다(□ 43/34/37).
+      구조가 갈리면 같은 근거로 써도 유사도가 0.7 대에 머문다. **게이트가 잡아야 지켜진다.**
+    측정 매체는 **조립용 원고(md)** 다 — 조판 뒤에는 말머리가 기호로 바뀌어 문구 대조가 어렵다.
+    """
+    want_leads, want_slots = [], []
+    for n in spec.get("outline", []):
+        for b in (n.get("blueprint") or []):
+            if isinstance(b, str):
+                want_leads.append(b)
+                continue
+            want_leads.append(b["lead"])
+            want_slots += [sl["text"] for sl in b.get("slots", [])]
+    if not want_leads:
+        return None
+
+    def norm_line(x):
+        return re.sub(r"\s+", "", re.sub(r"\*\*|`", "", x)).split("—")[0]
+
+    got_leads = [norm_line(m.group(1)) for m in re.finditer(r"^- (.+)$", md_text, re.M)]
+    got_slots = [norm_line(m.group(1)) for m in re.finditer(r"^  - (.+)$", md_text, re.M)]
+    wl = [norm_line(x) for x in want_leads]
+    ws = [norm_line(x) for x in want_slots]
+    miss_l = [want_leads[i] for i, x in enumerate(wl) if x not in got_leads]
+    miss_s = [want_slots[i] for i, x in enumerate(ws) if x not in got_slots]
+    extra_l = [x for x in got_leads if x not in wl]
+    extra_s = [x for x in got_slots if x not in ws]
+    return {"want_l": len(wl), "want_s": len(ws), "got_l": len(got_leads), "got_s": len(got_slots),
+            "miss_l": miss_l, "miss_s": miss_s, "extra_l": extra_l, "extra_s": extra_s}
+
+
 def typography_check(path, spec):
     """F-9·F-10 글자 크기·굵기 규율.
 
@@ -491,6 +524,20 @@ def main():
         check(f"F-8c 항목 길이(≤{ws.get('max_item_chars',160)}자)", not st["longs"],
               f"초과 {len(st['longs'])}건 {st['longs'][:3]}" if st["longs"] else "전 항목 이내",
               "hwpx", "warn")
+
+    # F-11 골격 준수 ------------------------------------------------------------
+    if md:
+        bpc = blueprint_check(md, spec)
+        if bpc:
+            tol = int(((spec.get("writing_style") or {}).get("blueprint_extra_tolerance", 2)))
+            bad = bpc["miss_l"] or bpc["miss_s"] or len(bpc["extra_l"]) > tol or len(bpc["extra_s"]) > tol
+            check("F-11 골격(리드·슬롯) 준수", not bad,
+                  (f"리드 {bpc['got_l']}/{bpc['want_l']} · 슬롯 {bpc['got_s']}/{bpc['want_s']}"
+                   + (f" · 누락 리드 {bpc['miss_l'][:2]}" if bpc["miss_l"] else "")
+                   + (f" · 누락 슬롯 {bpc['miss_s'][:2]}" if bpc["miss_s"] else "")
+                   + (f" · 초과 리드 {len(bpc['extra_l'])}개 {bpc['extra_l'][:2]}" if len(bpc["extra_l"]) > tol else "")
+                   + (f" · 초과 슬롯 {len(bpc['extra_s'])}개 {bpc['extra_s'][:2]}" if len(bpc["extra_s"]) > tol else "")),
+                  "md")
 
     # F-9·F-10 글자 크기·굵기 -------------------------------------------------
     tg = typography_check(a.hwpx, spec)
