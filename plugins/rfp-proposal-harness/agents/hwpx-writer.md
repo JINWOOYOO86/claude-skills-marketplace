@@ -23,7 +23,7 @@ model: opus
 
 ## 입력 / 출력 프로토콜
 - **입력**: `_workspace/01_template_rules.md` + **`01_template_spec.json`**(기계 명세), `10~14_*.md`, `20_figures/index.md`.
-- **출력**: `_workspace/30_proposal.hwpx`(가능 시), `30_proposal.md`(가이드 주석 포함 원본), `30_proposal.build.md`(설명문 제거본), `50_gate_form.json`, `50_gate_pages.json`.
+- **출력**: `_workspace/30_proposal.hwpx`(가능 시), `30_proposal.md`(가이드 주석 포함 원본), `30_proposal.build.md`(설명문 제거본), `50_gate_form.json`, `50_gate_pages.json`, `50_gate_refs.json`.
 - 산출 요약 `_workspace/30_proposal_manifest.md`에 `## STATUS`, 채워진 섹션/보완 필요 섹션 목록을 기록.
 
 ## 에러 핸들링
@@ -31,8 +31,15 @@ model: opus
 - 조사 파일이 없으면 해당 섹션을 `[보완 필요]` 로 두고 나머지를 완성한다. 빈 곳을 그럴듯한 말로 채우지 않는다.
 
 ## 협업 / 재호출
-- **양식 게이트(`gate_form.py`)와 분량 게이트(`gate_pages.py`)가 PASS 하기 전에는 평가위원단을 부르지 않는다.**
-  결과를 `50_gate_form.json`·`50_gate_pages.json` 으로 남긴다 — 형식 축 위원이 이 값을 인용해 채점한다.
+- **양식 게이트(`gate_form.py`)·분량 게이트(`gate_pages.py`)·참고문헌 정합성 게이트(`gate_refs.py`)가
+  PASS 하기 전에는 평가위원단을 부르지 않는다.**
+  결과를 `50_gate_form.json`·`50_gate_pages.json`·`50_gate_refs.json` 으로 남긴다 —
+  형식 축 위원은 앞의 둘을, **근거·정합성 축 위원은 `50_gate_refs.json`** 을 인용해 채점한다.
+- ★ **분량은 상한만 본다.** 배분보다 짧게 쓴 장은 위반이 아니다 — `gate_pages.py` 가 FAIL 하는 것은
+  총량이 상한(12p)을 넘거나 어느 장이 배분을 초과했을 때뿐이다.
+- ★ **문서에 쓴 출처·수치는 근거팩에 실재해야 한다.** `gate_refs.py` 가 근거팩(`*.md` 의 「확정 수치 대장」과
+  조사 본문)과 제출본을 대조한다. 근거팩에 대장이 없으면 **N-1 이 FAIL** 이다 — 조사 단계로 돌려보내
+  `## 확정 수치 대장` 절을 붙이게 한다(규율 R3). 대조 없이 통과를 발급하지 않는다.
   분량 초과 시 감축 순서는 **① 넓은 표 제거·서술 이관 → ② 표 개수 통합 → ③ 그림 배치 조정 → ④ 산문**이며,
   한 장을 줄이면 다른 장의 쪽 경계가 밀리므로 **매번 재측정**한다.
 - 최종 산출을 평가위원단(`proposal-evaluation-panel`)에 넘겨 검수받고, 위원장 통합 지적을 반영해 개정한다.

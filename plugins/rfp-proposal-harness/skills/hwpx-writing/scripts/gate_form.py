@@ -314,8 +314,19 @@ def sp_table_c_ledger(tables, spec, ws=None):
         over = [(r[0], len(c)) for r in body for c in r if lim and len(c) > lim]
         if over:
             det.append(f"셀 자수 초과({lim}자): " + ", ".join(f"{n} {L}자" for n, L in over[:4]))
-        tail = (f"근거 열 {len(body)}행 대장 출처와 일치 · 셀 {lim}자 이내"
-                if src else f"근거 열 {len(body)}행 — key 원문 0건·셀 {lim}자 이내 (대장 대조 미실시: --ledger 미지정)")
+        # ★ 오보 수정(2026-08-28): 대조를 못 했을 때 무조건 「--ledger 미지정」이라고 찍었다.
+        #   실제로는 `--ledger .` 을 줘도 워크스페이스에 `## 확정 수치 대장` 이 없으면 같은 문장이
+        #   나왔다(실측: ai_r1~r3 근거팩은 「# 10. 출처 목록」 형식이라 대장이 없었다).
+        #   대조가 실행됐는지와 대장이 있었는지는 다른 사실이므로 나눠서 보고한다.
+        if src:
+            tail = f"근거 열 {len(body)}행 대장 출처와 일치 · 셀 {lim}자 이내"
+        elif ws:
+            tail = (f"근거 열 {len(body)}행 — key 원문 0건·셀 {lim}자 이내 "
+                    f"(⚠️ 대장 대조 **미실시**: `{ws}` 에 「확정 수치 대장」 절이 없다. "
+                    "근거 정합성은 gate_refs.py N-1 이 별도로 판정한다)")
+        else:
+            tail = (f"근거 열 {len(body)}행 — key 원문 0건·셀 {lim}자 이내 "
+                    "(대장 대조 미실시: --ledger 미지정)")
         return (not det), ("; ".join(det) if det else tail)
     return True, "연차별 연구내용 표 없음 — TABLE_C 검사에서 이미 잡힌다"
 
@@ -631,6 +642,7 @@ def main():
           "hwpx")
 
     # F-7 산문 자수(분량 예산 사전검사) -------------------------------------------
+    # ★ 상한만 본다 — 분량 규정이 막는 것은 넘치는 쪽이고, 하한은 두지 않는다(2026-08-28 방침).
     if md:
         prose = re.sub(r"\s+", "", re.sub(r"^\|.*$", "", md, flags=re.M))
         n = len(prose)
