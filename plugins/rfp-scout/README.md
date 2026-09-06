@@ -37,7 +37,7 @@ skills/rfp-scouting/
 ├ scripts/iris_fetch.py          IRIS 목록·상세·첨부 수집 (표준 라이브러리만)
 ├ scripts/extract_attachment.py  PDF·HWPX·HWP·ZIP → 텍스트
 ├ assets/profile/                연구주제·키워드 등록양식 (빈 양식 + 작성 예시)  ← 사용자가 고치는 곳
-└ assets/routine-scaffold/       주 1회 자동 실행 루틴 설치 템플릿
+└ assets/routine-scaffold/       주 1회 자동 실행 루틴 설치 템플릿 (+ 설치 확인 setup_check.py · 기동 로그 bat)
 agents/rfp-scout.md              탐색 전담 에이전트
 ```
 
@@ -53,6 +53,7 @@ agents/rfp-scout.md              탐색 전담 에이전트
 
 **주간 자동 모니터링** — `assets/routine-scaffold/`의 템플릿으로 루틴 폴더를 만들고 스케줄러에 건다.
 밤에 돌려두고 다음날 아침 결과 HTML 한 파일만 확인하는 흐름이다. 히트가 없으면 알림도 오지 않는다.
+설치 뒤 `scripts/setup_check.py --confirm` 으로 키워드·주기·결과 폴더를 한 번 확인한다 — 확인 전에는 매 회차 리포트 맨 위에 확인 요청이 뜬다.
 
 **수집 경로만 확인** —
 ```bash
