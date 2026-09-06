@@ -1,10 +1,34 @@
 @echo off
 REM 주간 공고 모니터링 — Windows 작업 스케줄러가 호출하는 진입점 (예: 매주 일요일 23:10)
-REM WSL 안에서 claude -p 를 실행한다 (플러그인·스킬·루틴 폴더가 WSL 쪽에서 보이는 구성)
+REM WSL 안에서 run_rfp_scout.sh 를 돌린다 (claude -p · 플러그인 스킬이 WSL 쪽에 있는 구성).
 REM
-REM ※ 이 파일은 반드시 CRLF 로 저장한다. LF 로 저장하면 실행되지 않는다.
-REM ※ WSL 배포판 이름(-d Ubuntu)이 다르면 바꾼다. `wsl.exe -l -q` 로 확인.
+REM 치환: {{ROUTINE_ROOT_WIN}} → 루틴 폴더의 Windows 경로 (예: C:\Users\<user>\...\RFP_weekly)
+REM       {{ROUTINE_ROOT}}     → 같은 폴더의 WSL 경로   (예: /mnt/c/Users/<user>/.../RFP_weekly)
+REM
+REM ※ 이 파일은 반드시 CRLF 로 저장한다. LF 로 저장하면 cmd.exe 가 오작동한다.
+REM ※ WSL 배포판 이름이 다르면 -d 값을 바꾼다. `wsl.exe -l -q` 로 확인.
+REM
+REM [launch.log 를 남기는 이유]
+REM run_rfp_scout.sh 는 소유 PC 확인을 지난 뒤에야 자기 로그 파일을 만든다. 그래서 wsl.exe 기동
+REM 자체가 실패하면 흔적이 하나도 안 남는다 (작업 스케줄러 결과 0xFFFFFFFF, logs/ 에 파일 0건 —
+REM 실제로 두 회차가 이렇게 죽었고 원인 추적이 불가능했다).
+REM 여기서 시각·호스트·종료코드를 먼저 남겨 그 구멍을 메운다.
+REM .sh 는 claude 출력을 자기 로그로 보내므로 여기 쌓이는 건 시작/종료 두어 줄뿐이다.
+REM
+REM [재시도를 넣지 않는 이유]
+REM -1 은 기동 실패뿐 아니라 스카우팅이 시작된 뒤 WSL 이 죽은 경우에도 나온다.
+REM 그때 재실행하면 반쯤 쓰인 seen_rfp.json·latest.html 위에 다시 쓰게 된다
+REM (두 PC 동시 실행으로 같은 사고를 이미 겪었다 — owner.txt 가 생긴 이유).
+REM 실패한 회차는 다음 주에 자연히 다시 돈다 — 자동 재시도로 얻을 것보다 잃을 게 크다.
 
-wsl.exe -d Ubuntu -- bash -lc "bash {{ROUTINE_ROOT}}/scripts/run_rfp_scout.sh"
+set "ROOT={{ROUTINE_ROOT_WIN}}"
+set "LAUNCH=%ROOT%\logs\launch.log"
+if not exist "%ROOT%\logs" mkdir "%ROOT%\logs"
 
-exit /b %ERRORLEVEL%
+echo [%DATE% %TIME%] start host=%COMPUTERNAME% >> "%LAUNCH%"
+
+wsl.exe -d Ubuntu -- bash -lc "bash {{ROUTINE_ROOT}}/scripts/run_rfp_scout.sh" >> "%LAUNCH%" 2>&1
+set RC=%ERRORLEVEL%
+
+echo [%DATE% %TIME%] exit=%RC% >> "%LAUNCH%"
+exit /b %RC%

@@ -45,7 +45,10 @@ POST https://www.iris.go.kr/contents/retrieveBsnsAncmBtinSituList.do
     listBsnsAncmBtinSitu:[{ancmId,ancmTl,ancmNo,rcveStrDe,rcveEndDe,dDay,
                            sorgnNm,blngGovdSeNm,pbofrTpSeNmLst,rcveStt},...] }
   페이지당 10건. ListView.do 를 GET 해도 1페이지 10건은 서버렌더로 들어 있다.
-  ※ ancmPre(접수예정)는 과거분을 포함한 전체 아카이브(수천 건)다. 증분 탐색에 쓰지 말 것.
+  ※ ancmPre(접수예정)는 과거분을 포함한 전체 아카이브(5,500건+)이지만 **ancmId 내림차순**이라
+    1페이지 상위 몇 행만 실제 예정 공고다(2026-09-06 실측: 상위 6행 중 4건, 나머지는 과거분).
+    `iris_fetch.py list --status ancmPre --pages 1~2` 로 첫 페이지만 훑는다 — 공모예고 누락을 메우는 용도이며
+    전체를 증분 탐색에 쓰지 말 것. 접수 개시 후 접수중 목록에 다시 나타나므로 이력에 넣어 두면 재판정이 없다.
 
 ② 상세 (HTML)
 POST https://www.iris.go.kr/contents/retrieveBsnsAncmView.do
@@ -86,8 +89,8 @@ IRIS가 1순위이고, 아래는 누락 보완·온디맨드 탐색용이다. �
 | 기관 | URL | 주력 분야 | 검증 상태 |
 |------|-----|----------|----------|
 | KEIT (한국산업기술기획평가원) | https://srome.keit.re.kr | 산업부 R&D 전반(기계·소재·에너지) | 미검증 |
-| KETEP (한국에너지기술평가원) | https://www.ketep.re.kr | 에너지 R&D | 미검증 |
-| KIAT (한국산업기술진흥원) | https://www.kiat.or.kr | 국제공동·기반조성·인력양성 | 미검증 |
+| KETEP (한국에너지기술평가원) | https://www.ketep.re.kr — 사업공고 `/board?menuId=MENU002080100000000&boardId=BOARD00022` | 에너지 R&D. 최근 공고는 대개 IRIS에 기게시 | **검증됨(2026-09-06)** — `curl`로 제목이 서버렌더돼 나온다. `WebFetch`는 실패 |
+| KIAT (한국산업기술진흥원) | https://www.kiat.or.kr — 목록 `POST /front/board/boardContentsListAjax.do` (body `board_id=90&pageIndex=1`), 상세 `/front/board/boardContentsView.do?board_id=90&contents_id=…` | 국제공동·기반조성·인력양성. **국제공동(한-독 2+2 등)은 IRIS 미게시·K-PASS 접수**라 여기서만 잡힌다 | **검증됨(2026-09-06)** — Ajax 응답 `<tr>` 16행(번호·공고명·공고일·접수기간). 목록 페이지는 JS 로딩이라 `WebFetch`는 빈 화면 |
 | 에너지공단 | https://www.energy.or.kr | 보급·실증사업 | 미검증 |
 | IITP / NRF | https://www.iitp.kr , https://www.nrf.re.kr | ICT, 기초·원천 | 미검증 |
 | 중기부 / TIPA | https://www.smtech.go.kr | 중소기업 협업과제(기업 주관) | 미검증 |
@@ -96,6 +99,7 @@ IRIS가 1순위이고, 아래는 누락 보완·온디맨드 탐색용이다. �
 | 소속기관 내부 공고(원내 게시판·메일) | 사용자 제공 | 자동 수집 불가 → 모드 D(파일 투입) | — |
 
 부처 홈페이지는 **공지 게시판이 정적 HTML인 경우가 많아 `WebFetch`로 바로 긁히는 편**이다.
+단 KETEP·KIAT는 `WebFetch`가 실패하거나 빈 화면이고, `curl`(KETEP)·Ajax `POST`(KIAT)로는 된다(2026-09-06 실측).
 
 ---
 
@@ -139,3 +143,7 @@ HWP5  npm i cfb        →  CFB.read(buf) 로 컨테이너를 열고 BodyText/Se
 | **접수기간이 사전공고/본공고로 나뉨** | D-day 착시 | 사전공고는 별도 표기, D-day는 본공고 기준 |
 | **선정 완료된 협약 건이 목록에 남음** | 공모 대상이 아닌데 신규로 잡힘 | 상세에서 공모유형·접수상태를 확인해 탈락 처리 |
 | **첨부 다운로드 차단(다른 포털)** | 상세는 보이나 파일이 안 받아짐 | 첨부명·크기만 기록하고 사용자 수동 다운로드 요청 |
+| **KIAT 목록이 `WebFetch`로 빈 화면** | JS 로딩 | §3의 Ajax 엔드포인트를 `POST`로 직접 호출 |
+| **KETEP `WebFetch` 실패** | 도구 쪽 차단 | `curl`로 메인·게시판 HTML을 받으면 제목이 서버렌더돼 있다 |
+| **IRIS에 안 올라오는 공고** | KIAT 국제공동 등은 K-PASS로 접수 | KIAT 게시판을 보조로 훑는다. IRIS 전수만 믿지 않는다 |
+| **접수예정(ancmPre) 전체를 훑음** | 5,500건 아카이브 | ancmId 내림차순이므로 1페이지 상위 행만 본다(§2) |
