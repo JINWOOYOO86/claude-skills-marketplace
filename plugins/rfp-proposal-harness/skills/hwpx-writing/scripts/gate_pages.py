@@ -8,6 +8,9 @@
   실측 경로: HWPX ──한컴 COM──→ PageCount + PDF ──PyMuPDF──→ 장별 시작쪽 → 장별 점유 쪽수
   대조 기준: 양식 명세의 page_budget (총 10p 내외 / 상한 12p / 0:1 1:2 2:2 3:3 4:2)
 
+★ 이 게이트는 **상한만** 판정한다(2026-08-28 확인된 운영 방침). 배분보다 적게 쓴 장은 위반이 아니다 —
+  분량 규정이 막는 것은 넘치는 쪽이고, 얼마나 채울지는 작성자의 판단이다.
+
 ★ 장별 점유 쪽수의 정의 — 다음 장이 시작하기 전까지 소모한 쪽수(= 다음 장 시작쪽 − 이 장 시작쪽,
   마지막 장은 총쪽수 − 시작쪽 + 1). 합이 총쪽수와 정확히 일치한다. 한 쪽을 두 장이 나눠 쓰면
   뒤 장이 그 쪽을 가져간다(경계 쪽 이중 계상 방지).
@@ -206,7 +209,15 @@ def measure_worst(hwpx, chapters, winpython, repeat, spec=None):
 
 
 def estimate(md_text, spec):
-    """실측 불가 시의 추정 — 실측을 대체하지 않는다(측정 원단위는 default_form_rules.md §2)."""
+    """실측 불가 시의 추정 — 실측을 대체하지 않는다(측정 원단위는 default_form_rules.md §2).
+
+    ⚠️ 원단위 사고(2026-08-28 발견): 이 함수는 `prose / 1750` 을 쓰고 있었다. 그런데
+    `default_form_rules.md` §2 는 **2026-08-14 에 그 값을 폐기**하고 「약 1,000자/p」로 정정했다
+    (좌우 여백 30mm·돋움 11pt·줄간격 160% 에서 995·1,036·1,060자 실측). 폐기된 값이 남아 있어
+    추정 모드가 **분량을 1.7배 과소평가**했다. 이제 명세(`limits.prose_chars_per_page`)를 읽는다.
+    """
+    lim = (spec or {}).get("limits") or {}
+    per_page = float(lim.get("prose_chars_per_page") or 1000)
     prose = len(re.sub(r"\s+", "", re.sub(r"^\|.*$", "", md_text, flags=re.M)))
     tables = re.findall(r"(?:^\|.*$\n)+", md_text, re.M)
     tp = 0.0
@@ -214,7 +225,7 @@ def estimate(md_text, spec):
         cols = t.strip().split("\n")[0].count("|") - 1
         tp += 0.5 if cols <= 4 else (0.8 if cols <= 6 else 1.1)
     figs = len(re.findall(r"^!\[", md_text, re.M))
-    return prose / 1750 + tp + figs
+    return prose / per_page + tp + figs
 
 
 def chapter_stats(md_text, chapters):
@@ -280,9 +291,16 @@ def main():
     elif total > pb["total"]:
         print(f"  주의: 목표 {pb['total']}p 를 {total-pb['total']}p 초과(상한 이내)")
 
-    if starts and all(v[0] for v in starts.values()):
+    # ★ 버그(2026-08-28): 조건이 `all(v[0] for v in starts.values())` 였다. `starts` 에는 장 말고도
+    #   센티널 `_end`·`_gap` 이 들어 있어서, 줄간격을 못 재면(`_gap` = None) **장별 판정 전체가
+    #   조용히 스킵**되고 총량만으로 PASS 가 났다. 장 제목을 하나라도 PDF 에서 못 찾을 때도 같았고,
+    #   그 사실이 출력에도 JSON 에도 남지 않았다 — 「분량검사가 동작하지 않는다」의 실체다.
+    #   → 장 id 만 보고, 못 잰 장은 이름을 찍어 남긴다.
+    ids = [c["id"] for c in chapters]
+    unmeasured = [cid for cid in ids if not (starts.get(cid) or (None,))[0]]
+    chapters_measured = bool(starts) and not unmeasured
+    if chapters_measured:
         stats = chapter_stats(md_text, chapters) if md_text else {}
-        ids = [c["id"] for c in chapters]
         # 연속 위치(쪽 + 쪽 안 세로 비율) 로 점유량을 잰다 — 경계 쪽을 나눠 쓰는 실제를 반영한다.
         # 합은 총 쪽수와 정확히 일치한다.
         pos = {cid: (starts[cid][0] - 1) + starts[cid][1] for cid in ids}
@@ -297,7 +315,7 @@ def main():
         HARD_TOL = float(pb.get("chapter_hard_tolerance", 0.5))
         over_target = total > pb["total"]
         print(f"\n■ 장별 점유 쪽수 (연속 측정 · 배분 대비 {TOL}p 초과부터 경고, "
-              f"{HARD_TOL}p 초과 또는 총량 초과 시 위반)")
+              f"{HARD_TOL}p 초과 또는 총량 초과 시 위반 — 미달은 판정하지 않는다)")
         print(f"{'장':<4}{'시작':>7}{'점유':>7}{'배분':>6}{'판정':>9}   원인 분해")
         for i, cid in enumerate(ids):
             occ = (pos[ids[i + 1]] - pos[cid]) if i + 1 < len(ids) else (doc_end - pos[cid])
@@ -314,13 +332,17 @@ def main():
                   f"{mark:>9}   {cause}")
             rows.append({"id": cid, "start_page": starts[cid][0], "start_frac": starts[cid][1],
                          "occupied": round(occ, 2), "budget": bud, "ok": ok,
-                         "warn": bool(warn_only), **st})
+                         "warn": bool(warn_only), "over": round(over, 2), **st})
             if not ok:
                 fails.append(f"{cid}장 {occ:.1f}p > 배분 {bud}p ({over:.1f}p 초과)")
             elif warn_only:
                 warns.append(f"{cid}장 {occ:.1f}p (배분 {bud}p · +{over:.1f}p — 조판 경계 범위)")
     else:
-        print("  장별 배분 미측정 — 총량만 판정한다")
+        why = (f"PDF 에서 장 제목을 못 찾음: {unmeasured}" if unmeasured
+               else "장 시작쪽 판독 실패(PDF 미생성 또는 PyMuPDF 부재)")
+        print(f"\n⚠️ 장별 배분 미측정 — 총량만 판정한다 ({why}).")
+        print("   장별 배분은 이 실행에서 **검사되지 않았다.** 형식 축 위원은 이 항목을 인용하지 말 것.")
+        warns.append(f"장별 배분 미측정 ({why})")
 
     ok = not fails
     # ★ 규격 조판 회차를 못 얻은 채 난 FAIL 은 **측정을 먼저 의심한다**(2026-08-15 실측: 13p FAIL → 재측정 9p PASS).
@@ -340,6 +362,8 @@ def main():
               " ③ 그림 축소 → ④ 산문. 행을 줄이는 것은 효과가 가장 작다.")
     if a.json:
         json.dump({"pass": ok, "total": total, "measurement_suspect": suspect,
+                   "chapters_measured": chapters_measured,
+                   "unmeasured_chapters": unmeasured,
                    "budget": pb, "chapters": rows,
                    "fails": fails, "warns": warns, "note": note},
                   open(a.json, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
